@@ -29,8 +29,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
 COPY --from=builder /workspace/apps/web-admin/.next-prod/standalone ./
-COPY --from=builder /workspace/apps/web-admin/.next-prod/static ./apps/web-admin/.next-prod/static
-COPY --from=builder /workspace/apps/web-admin/public ./apps/web-admin/public
+COPY --from=builder /workspace/apps/web-admin/.next-prod/static ./.next-prod/static
+COPY --from=builder /workspace/apps/web-admin/public ./public
 
 EXPOSE 3000
 
