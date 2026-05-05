@@ -18,9 +18,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const runtimeApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
   return (
     <html lang="en">
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__FINANCEGUARD_API_URL__ = ${JSON.stringify(runtimeApiUrl)};`
+          }}
+        />
         <PwaRegister />
         {children}
       </body>

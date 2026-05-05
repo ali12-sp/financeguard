@@ -34,4 +34,4 @@ COPY --from=builder /workspace/apps/web-admin/public ./apps/web-admin/public
 
 EXPOSE 3000
 
-CMD ["node", "apps/web-admin/server.js"]
+CMD ["node", "server.js"]

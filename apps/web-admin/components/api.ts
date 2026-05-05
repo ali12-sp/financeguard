@@ -1,6 +1,19 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const TOKEN_KEY = 'financeguard_token';
 const USER_KEY = 'financeguard_user';
+
+declare global {
+  interface Window {
+    __FINANCEGUARD_API_URL__?: string;
+  }
+}
+
+function getApiUrl() {
+  if (typeof window !== 'undefined' && window.__FINANCEGUARD_API_URL__) {
+    return window.__FINANCEGUARD_API_URL__;
+  }
+
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+}
 
 function buildErrorMessage(error: any, status: number) {
   if (!error) {
@@ -114,7 +127,7 @@ export async function apiFetch<T>(path: string, token = getStoredToken(), init?:
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers,
     cache: 'no-store'
