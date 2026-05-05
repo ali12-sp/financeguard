@@ -4,7 +4,7 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   distDir: '.next-prod',
   output: 'standalone',
-  outputFileTracingRoot: path.resolve(__dirname),
+  outputFileTracingRoot: path.resolve(__dirname, '../..'),
   eslint: {
     ignoreDuringBuilds: true,
   },
