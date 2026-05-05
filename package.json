@@ -1,0 +1,23 @@
+{
+  "name": "financeguard-starter",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:web": "npm --workspace apps/web-admin run dev",
+    "build:api": "npm --workspace apps/api run build",
+    "build:web": "npm --workspace apps/web-admin run build",
+    "test:api": "npm --workspace apps/api run test",
+    "backup:api": "npm --workspace apps/api run backup",
+    "verify:release": "npm run build:api && npm run test:api && npx tsc --noEmit -p apps/web-admin/tsconfig.json",
+    "docker:prod:build": "docker compose -f docker-compose.prod.yml build",
+    "docker:prod:up": "docker compose --env-file .env.production -f docker-compose.prod.yml up -d"
+  }
+}

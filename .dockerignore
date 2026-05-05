@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+apps/android-agent/.gradle
+apps/android-agent/**/build
+apps/web-admin/.next
+apps/web-admin/.next-prod
+apps/api/dist
+apps/api/data/backups
+*.log
+replay_pid*.log
+.git
+.gitignore
