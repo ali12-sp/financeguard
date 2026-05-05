@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDefaultRouteForRole, setSession } from '../../components/session';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+import { getApiUrl } from '../../components/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,7 +17,7 @@ export default function LoginPage() {
   const [setupReady, setSetupReady] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/setup/status`, { cache: 'no-store' })
+    fetch(`${getApiUrl()}/setup/status`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         setSetupReady(Boolean(data.initialized));
@@ -44,7 +43,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const res = await fetch(`${API_URL}/auth/login`, {
+    const res = await fetch(`${getApiUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspace, identifier, password })

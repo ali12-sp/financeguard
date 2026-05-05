@@ -3,8 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDefaultRouteForRole, setSession } from '../../components/session';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+import { getApiUrl } from '../../components/api';
 
 export default function SetupPage() {
   const router = useRouter();
@@ -18,7 +17,7 @@ export default function SetupPage() {
   const [status, setStatus] = useState('');
 
   useEffect(() => {
-    fetch(`${API_URL}/setup/status`, { cache: 'no-store' })
+    fetch(`${getApiUrl()}/setup/status`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.initialized) {
@@ -33,7 +32,7 @@ export default function SetupPage() {
     setLoading(true);
     setStatus('');
 
-    const res = await fetch(`${API_URL}/setup/initialize`, {
+    const res = await fetch(`${getApiUrl()}/setup/initialize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-function getApiUrl() {
+export function getApiUrl() {
   if (typeof window !== 'undefined' && window.__FINANCEGUARD_API_URL__) {
     return window.__FINANCEGUARD_API_URL__;
   }
