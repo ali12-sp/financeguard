@@ -25,6 +25,8 @@ interface WorkspaceRow {
     supportEmail?: string;
     supportPhone?: string;
     supportWhatsapp?: string;
+    agentApkDownloadUrl?: string;
+    agentApkChecksum?: string;
   };
   adminCount: number;
   staffCount: number;
@@ -64,6 +66,8 @@ interface WorkspaceFormState {
   supportEmail: string;
   supportPhone: string;
   supportWhatsapp: string;
+  agentApkDownloadUrl: string;
+  agentApkChecksum: string;
   adminName: string;
   adminEmail: string;
   adminPhone: string;
@@ -83,6 +87,8 @@ const emptyForm: WorkspaceFormState = {
   supportEmail: '',
   supportPhone: '',
   supportWhatsapp: '',
+  agentApkDownloadUrl: '',
+  agentApkChecksum: '',
   adminName: '',
   adminEmail: '',
   adminPhone: '',
@@ -103,6 +109,8 @@ function toEditorForm(row: WorkspaceRow): WorkspaceFormState {
     supportEmail: row.settings.supportEmail || '',
     supportPhone: row.settings.supportPhone || '',
     supportWhatsapp: row.settings.supportWhatsapp || '',
+    agentApkDownloadUrl: row.settings.agentApkDownloadUrl || '',
+    agentApkChecksum: row.settings.agentApkChecksum || '',
     adminName: row.primaryAdmin?.name || '',
     adminEmail: row.primaryAdmin?.email || '',
     adminPhone: row.primaryAdmin?.phone || '',
@@ -192,7 +200,9 @@ export default function WorkspacesPage() {
           notifyOnDeviceRegistration: form.notifyOnDeviceRegistration === 'true',
           supportEmail: form.supportEmail || undefined,
           supportPhone: form.supportPhone || undefined,
-          supportWhatsapp: form.supportWhatsapp || undefined
+          supportWhatsapp: form.supportWhatsapp || undefined,
+          agentApkDownloadUrl: form.agentApkDownloadUrl || undefined,
+          agentApkChecksum: form.agentApkChecksum || undefined
         }
       });
       setForm(emptyForm);
@@ -232,7 +242,9 @@ export default function WorkspacesPage() {
           notifyOnDeviceRegistration: editorForm.notifyOnDeviceRegistration === 'true',
           supportEmail: editorForm.supportEmail || '',
           supportPhone: editorForm.supportPhone || '',
-          supportWhatsapp: editorForm.supportWhatsapp || ''
+          supportWhatsapp: editorForm.supportWhatsapp || '',
+          agentApkDownloadUrl: editorForm.agentApkDownloadUrl || '',
+          agentApkChecksum: editorForm.agentApkChecksum || ''
         }
       });
       setStatus(`${editorForm.organizationName} updated successfully.`);
@@ -384,6 +396,17 @@ export default function WorkspacesPage() {
               placeholder="Alert WhatsApp recipient"
             />
             <input
+              value={form.agentApkDownloadUrl}
+              onChange={(event) => updateForm(setForm, 'agentApkDownloadUrl', event.target.value)}
+              placeholder="Agent APK download URL"
+              type="url"
+            />
+            <input
+              value={form.agentApkChecksum}
+              onChange={(event) => updateForm(setForm, 'agentApkChecksum', event.target.value)}
+              placeholder="Agent APK SHA-256 checksum"
+            />
+            <input
               value={form.defaultLockMessage}
               onChange={(event) => updateForm(setForm, 'defaultLockMessage', event.target.value)}
               placeholder="Default lock message"
@@ -490,6 +513,17 @@ export default function WorkspacesPage() {
                 value={editorForm.supportWhatsapp}
                 onChange={(event) => updateEditorForm('supportWhatsapp', event.target.value)}
                 placeholder="Alert WhatsApp recipient"
+              />
+              <input
+                value={editorForm.agentApkDownloadUrl}
+                onChange={(event) => updateEditorForm('agentApkDownloadUrl', event.target.value)}
+                placeholder="Agent APK download URL"
+                type="url"
+              />
+              <input
+                value={editorForm.agentApkChecksum}
+                onChange={(event) => updateEditorForm('agentApkChecksum', event.target.value)}
+                placeholder="Agent APK SHA-256 checksum"
               />
               <textarea
                 value={editorForm.defaultLockMessage}

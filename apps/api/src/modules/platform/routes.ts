@@ -20,7 +20,9 @@ const workspaceSettingsSchema = z.object({
   notifyOnDeviceRegistration: z.boolean().optional(),
   supportEmail: z.string().email().optional().or(z.literal('')),
   supportPhone: z.string().min(8).max(30).optional().or(z.literal('')),
-  supportWhatsapp: z.string().min(8).max(30).optional().or(z.literal(''))
+  supportWhatsapp: z.string().min(8).max(30).optional().or(z.literal('')),
+  agentApkDownloadUrl: z.string().url().optional().or(z.literal('')),
+  agentApkChecksum: z.string().min(16).max(255).optional().or(z.literal(''))
 });
 
 function isRegistrationTemplate(template: string) {
@@ -73,7 +75,11 @@ function buildWorkspaceSettings(input: {
       input.existing?.supportPhone ??
       input.contactPhone,
     supportWhatsapp:
-      input.settings?.supportWhatsapp ?? input.existing?.supportWhatsapp
+      input.settings?.supportWhatsapp ?? input.existing?.supportWhatsapp,
+    agentApkDownloadUrl:
+      input.settings?.agentApkDownloadUrl ?? input.existing?.agentApkDownloadUrl,
+    agentApkChecksum:
+      input.settings?.agentApkChecksum ?? input.existing?.agentApkChecksum
   });
 }
 

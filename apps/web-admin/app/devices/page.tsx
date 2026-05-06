@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import LayoutShell from '../../components/layout-shell';
 import { apiFetch, apiPost } from '../../components/api';
 import { formatCurrency } from '../../components/formatters';
@@ -23,13 +24,41 @@ interface Device {
 export default function DevicesPage() {
   const [rows, setRows] = useState<Device[]>([]);
   const [status, setStatus] = useState('');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [provisioning, setProvisioning] = useState<{
     deviceId: string;
     agentSecret: string;
     apiBaseUrl: string;
+    adminComponent: string;
+    organizationId: string;
+    adminExtras: {
+      apiBaseUrl: string;
+      agentSecret: string;
+      deviceId: string;
+      organizationId: string;
+      organizationName: string;
+    };
     adbCommand: string;
     qrNotes: string[];
+    agentApkDownloadUrl?: string;
+    agentApkChecksum?: string;
+    qrPayload?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!provisioning?.qrPayload) {
+      setQrCodeDataUrl('');
+      return;
+    }
+
+    QRCode.toDataURL(provisioning.qrPayload, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 320
+    })
+      .then(setQrCodeDataUrl)
+      .catch(() => setQrCodeDataUrl(''));
+  }, [provisioning?.qrPayload]);
 
   async function loadDevices() {
     apiFetch<Device[]>('/devices')
@@ -85,13 +114,53 @@ export default function DevicesPage() {
         deviceId: string;
         agentSecret: string;
         apiBaseUrl: string;
+        adminComponent: string;
+        organizationId: string;
+        adminExtras: {
+          apiBaseUrl: string;
+          agentSecret: string;
+          deviceId: string;
+          organizationId: string;
+          organizationName: string;
+        };
         adbCommand: string;
         qrNotes: string[];
       }>(`/devices/${deviceId}/provisioning`);
-      setProvisioning(details);
+      const workspaceSettings = getStoredUser()?.workspaceSettings;
+      const agentApkDownloadUrl = workspaceSettings?.agentApkDownloadUrl?.trim() || undefined;
+      const agentApkChecksum = workspaceSettings?.agentApkChecksum?.trim() || undefined;
+      const qrPayload =
+        agentApkDownloadUrl && agentApkChecksum
+          ? JSON.stringify({
+              'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': details.adminComponent,
+              'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': agentApkDownloadUrl,
+              'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM': agentApkChecksum,
+              'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': details.adminExtras
+            }, null, 2)
+          : undefined;
+
+      setProvisioning({
+        ...details,
+        agentApkDownloadUrl,
+        agentApkChecksum,
+        qrPayload
+      });
       setStatus(`Provisioning details loaded for ${deviceId}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to load provisioning details');
+    }
+  }
+
+  async function copyProvisioningJson() {
+    if (!provisioning?.qrPayload) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(provisioning.qrPayload);
+      setStatus('Provisioning JSON copied to clipboard.');
+    } catch {
+      setStatus('Unable to copy provisioning JSON from this browser.');
     }
   }
 
@@ -107,13 +176,52 @@ export default function DevicesPage() {
             <div><strong>Device ID</strong><div className="inline-note mono">{provisioning.deviceId}</div></div>
             <div><strong>Agent Secret</strong><div className="inline-note mono">{provisioning.agentSecret}</div></div>
             <div><strong>API Base URL</strong><div className="inline-note mono">{provisioning.apiBaseUrl}</div></div>
+            <div><strong>Workspace Slug</strong><div className="inline-note mono">{provisioning.organizationId}</div></div>
             <div><strong>ADB Command</strong><div className="inline-note mono">{provisioning.adbCommand}</div></div>
+            <div><strong>APK Download URL</strong><div className="inline-note mono">{provisioning.agentApkDownloadUrl || 'Set this in Workspaces once and the QR will auto-generate here.'}</div></div>
+            <div><strong>APK Checksum</strong><div className="inline-note mono">{provisioning.agentApkChecksum || 'Missing'}</div></div>
             <div>
               <strong>QR Notes</strong>
               {provisioning.qrNotes.map((note) => (
                 <div key={note} className="inline-note">{note}</div>
               ))}
             </div>
+            {provisioning.qrPayload && qrCodeDataUrl ? (
+              <div className="grid grid-2" style={{ alignItems: 'start', marginTop: 12 }}>
+                <div>
+                  <strong>Provisioning QR</strong>
+                  <div style={{ marginTop: 12 }}>
+                    <img
+                      src={qrCodeDataUrl}
+                      alt={`Provisioning QR for ${provisioning.deviceId}`}
+                      style={{ background: '#fff', padding: 12, borderRadius: 18, maxWidth: 320, width: '100%' }}
+                    />
+                  </div>
+                  <div className="button-row" style={{ marginTop: 12 }}>
+                    <button type="button" className="ghost-button" onClick={copyProvisioningJson}>
+                      Copy JSON
+                    </button>
+                    {provisioning.agentApkDownloadUrl ? (
+                      <a className="ghost-button" href={provisioning.agentApkDownloadUrl} target="_blank" rel="noreferrer">
+                        Open APK
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+                <div>
+                  <strong>Provisioning JSON</strong>
+                  <textarea
+                    readOnly
+                    value={provisioning.qrPayload}
+                    style={{ minHeight: 280, marginTop: 12 }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="inline-note" style={{ marginTop: 12 }}>
+                Add the agent APK download URL and checksum in Workspace settings once, then this page will generate the QR code automatically for every device.
+              </div>
+            )}
           </div>
         </div>
       ) : null}

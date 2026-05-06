@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.UserManager
 import android.provider.Settings
 
 class DevicePolicyController(
@@ -30,6 +31,12 @@ class DevicePolicyController(
                 dpm?.setOrganizationId(organizationId)
             }
         }
+        enforceManagedBaseline()
+    }
+
+    fun enforceManagedBaseline() {
+        if (!isDeviceOwner()) return
+
         runCatching {
             dpm?.setLockTaskPackages(admin, arrayOf(context.packageName))
         }
@@ -38,6 +45,31 @@ class DevicePolicyController(
         }
         runCatching {
             dpm?.setUninstallBlocked(admin, context.packageName, true)
+        }
+        runCatching {
+            dpm?.setShortSupportMessage(admin, "Managed by FinanceGuard")
+        }
+        runCatching {
+            dpm?.setLongSupportMessage(
+                admin,
+                "This device is protected by FinanceGuard device controls. Contact your seller or administrator for support."
+            )
+        }
+        runCatching {
+            dpm?.setBackupServiceEnabled(admin, false)
+        }
+
+        applyUserRestriction(UserManager.DISALLOW_FACTORY_RESET)
+        applyUserRestriction(UserManager.DISALLOW_SAFE_BOOT)
+        applyUserRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES)
+        applyUserRestriction(UserManager.DISALLOW_USB_FILE_TRANSFER)
+        applyUserRestriction(UserManager.DISALLOW_ADD_USER)
+        applyUserRestriction(UserManager.DISALLOW_REMOVE_USER)
+        applyUserRestriction(UserManager.DISALLOW_APPS_CONTROL)
+        applyUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            applyUserRestriction(UserManager.DISALLOW_SYSTEM_ERROR_DIALOGS)
+            applyUserRestriction(UserManager.DISALLOW_USER_SWITCH)
         }
     }
 
@@ -59,6 +91,7 @@ class DevicePolicyController(
 
     fun applyRestrictedMode(lockMessage: String) {
         if (isDeviceOwner()) {
+            enforceManagedBaseline()
             runCatching {
                 dpm?.setDeviceOwnerLockScreenInfo(admin, lockMessage)
             }
@@ -106,5 +139,11 @@ class DevicePolicyController(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         context.startActivity(intent)
+    }
+
+    private fun applyUserRestriction(restriction: String) {
+        runCatching {
+            dpm?.addUserRestriction(admin, restriction)
+        }
     }
 }

@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        DevicePolicyController(this).enforceManagedBaseline()
         refreshUi()
     }
 
@@ -155,6 +156,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 }"
             )
+            if (policyController.isDeviceOwner()) {
+                appendLine("Managed baseline: USB debugging, factory reset in Settings, safe boot, USB file transfer, app control, and unknown sources blocked")
+            }
             appendLine("Android version: ${Build.VERSION.RELEASE}")
             appendLine("Organization: ${prefs.organizationName}")
             appendLine("API URL: ${prefs.apiBaseUrl}")

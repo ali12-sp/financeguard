@@ -45,6 +45,8 @@ export interface WorkspaceSettings {
   supportEmail?: string;
   supportPhone?: string;
   supportWhatsapp?: string;
+  agentApkDownloadUrl?: string;
+  agentApkChecksum?: string;
 }
 
 export interface TenantRecord {
@@ -274,7 +276,9 @@ export function buildDefaultWorkspaceSettings(
     notifyOnDeviceRegistration: overrides.notifyOnDeviceRegistration ?? true,
     supportEmail: overrides.supportEmail?.trim().toLowerCase() || undefined,
     supportPhone: overrides.supportPhone?.trim() || undefined,
-    supportWhatsapp: overrides.supportWhatsapp?.trim() || undefined
+    supportWhatsapp: overrides.supportWhatsapp?.trim() || undefined,
+    agentApkDownloadUrl: overrides.agentApkDownloadUrl?.trim() || undefined,
+    agentApkChecksum: overrides.agentApkChecksum?.trim() || undefined
   };
 }
 
@@ -844,7 +848,9 @@ async function ensureWorkspaceSettingsMigration() {
       notifyOnDeviceRegistration: tenant.settings.notifyOnDeviceRegistration,
       supportEmail: tenant.settings.supportEmail ?? tenant.contactEmail,
       supportPhone: tenant.settings.supportPhone ?? tenant.contactPhone,
-      supportWhatsapp: tenant.settings.supportWhatsapp
+      supportWhatsapp: tenant.settings.supportWhatsapp,
+      agentApkDownloadUrl: tenant.settings.agentApkDownloadUrl,
+      agentApkChecksum: tenant.settings.agentApkChecksum
     });
 
     if (JSON.stringify(normalized) !== JSON.stringify(tenant.settings)) {

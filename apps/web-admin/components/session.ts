@@ -10,6 +10,8 @@ export interface WorkspaceSettings {
   supportEmail?: string;
   supportPhone?: string;
   supportWhatsapp?: string;
+  agentApkDownloadUrl?: string;
+  agentApkChecksum?: string;
 }
 
 export interface SessionUser {
