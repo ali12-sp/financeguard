@@ -20,7 +20,9 @@ export const env = {
   databaseSslMode: process.env.DATABASE_SSL_MODE || 'disable',
   schedulerIntervalMs: Number(process.env.SCHEDULER_INTERVAL_MS || 60 * 60 * 1000),
   backupIntervalMs: Number(process.env.BACKUP_INTERVAL_MS || 6 * 60 * 60 * 1000),
+  notificationDispatchIntervalMs: Number(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS || 30 * 1000),
   bodySizeLimit: process.env.BODY_SIZE_LIMIT || '1mb',
+  runBackgroundJobs: process.env.RUN_BACKGROUND_JOBS !== 'false',
   corsAllowedOrigins: parseOrigins(process.env.CORS_ALLOWED_ORIGINS).length > 0
     ? parseOrigins(process.env.CORS_ALLOWED_ORIGINS)
     : ['http://localhost:3000', 'http://127.0.0.1:3000'],

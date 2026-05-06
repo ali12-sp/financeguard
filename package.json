@@ -11,6 +11,7 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "dev:api": "npm --workspace apps/api run dev",
+    "dev:worker": "npm --workspace apps/api run dev:worker",
     "dev:web": "npm --workspace apps/web-admin run dev",
     "build:api": "npm --workspace apps/api run build",
     "build:web": "npm --workspace apps/web-admin run build",

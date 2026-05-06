@@ -22,7 +22,8 @@ const workspaceSettingsSchema = z.object({
   supportPhone: z.string().min(8).max(30).optional().or(z.literal('')),
   supportWhatsapp: z.string().min(8).max(30).optional().or(z.literal('')),
   agentApkDownloadUrl: z.string().url().optional().or(z.literal('')),
-  agentApkChecksum: z.string().min(16).max(255).optional().or(z.literal(''))
+  agentApkChecksum: z.string().min(16).max(255).optional().or(z.literal('')),
+  frpGoogleAccounts: z.array(z.string().email()).optional()
 });
 
 function isRegistrationTemplate(template: string) {
@@ -79,7 +80,9 @@ function buildWorkspaceSettings(input: {
     agentApkDownloadUrl:
       input.settings?.agentApkDownloadUrl ?? input.existing?.agentApkDownloadUrl,
     agentApkChecksum:
-      input.settings?.agentApkChecksum ?? input.existing?.agentApkChecksum
+      input.settings?.agentApkChecksum ?? input.existing?.agentApkChecksum,
+    frpGoogleAccounts:
+      input.settings?.frpGoogleAccounts ?? input.existing?.frpGoogleAccounts
   });
 }
 

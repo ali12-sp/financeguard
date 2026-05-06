@@ -36,7 +36,8 @@ class PolicyComplianceActivity : AppCompatActivity() {
         thread {
             DevicePolicyController(this).finishProvisioning(
                 organizationName = prefs.snapshot().organizationName,
-                organizationId = prefs.snapshot().organizationId
+                organizationId = prefs.snapshot().organizationId,
+                frpAccountsCsv = prefs.snapshot().frpAccountsCsv
             )
             NotificationHelper.ensureChannel(this)
             SyncScheduler.schedulePeriodic(this)

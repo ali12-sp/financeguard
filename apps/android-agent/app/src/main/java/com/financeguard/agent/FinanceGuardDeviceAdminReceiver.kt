@@ -13,7 +13,8 @@ class FinanceGuardDeviceAdminReceiver : DeviceAdminReceiver() {
         val prefs = AgentPreferences.from(context).snapshot()
         DevicePolicyController(context).finishProvisioning(
             organizationName = prefs.organizationName,
-            organizationId = prefs.organizationId
+            organizationId = prefs.organizationId,
+            frpAccountsCsv = prefs.frpAccountsCsv
         )
         SyncScheduler.schedulePeriodic(context)
 

@@ -11,6 +11,7 @@ data class AgentSnapshot(
     val deviceId: String,
     val organizationId: String,
     val organizationName: String,
+    val frpAccountsCsv: String,
     val currentState: DeviceState,
     val customerName: String,
     val contractId: String,
@@ -34,6 +35,7 @@ class AgentPreferences private constructor(
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_ORG_ID = "organization_id"
         private const val KEY_ORG_NAME = "organization_name"
+        private const val KEY_FRP_ACCOUNTS = "frp_accounts"
         private const val KEY_CURRENT_STATE = "current_state"
         private const val KEY_CUSTOMER_NAME = "customer_name"
         private const val KEY_CONTRACT_ID = "contract_id"
@@ -59,6 +61,7 @@ class AgentPreferences private constructor(
             deviceId = prefs.getString(KEY_DEVICE_ID, "") ?: "",
             organizationId = prefs.getString(KEY_ORG_ID, "financeguard-demo") ?: "financeguard-demo",
             organizationName = prefs.getString(KEY_ORG_NAME, "FinanceGuard Demo") ?: "FinanceGuard Demo",
+            frpAccountsCsv = prefs.getString(KEY_FRP_ACCOUNTS, "") ?: "",
             currentState = DeviceState.valueOf(prefs.getString(KEY_CURRENT_STATE, DeviceState.ACTIVE.name) ?: DeviceState.ACTIVE.name),
             customerName = prefs.getString(KEY_CUSTOMER_NAME, "") ?: "",
             contractId = prefs.getString(KEY_CONTRACT_ID, "") ?: "",
@@ -82,6 +85,7 @@ class AgentPreferences private constructor(
             putString(KEY_DEVICE_ID, extras.getString("deviceId", snapshot().deviceId))
             putString(KEY_ORG_ID, extras.getString("organizationId", snapshot().organizationId))
             putString(KEY_ORG_NAME, extras.getString("organizationName", snapshot().organizationName))
+            putString(KEY_FRP_ACCOUNTS, extras.getString("frpAccountsCsv", snapshot().frpAccountsCsv))
         }
     }
 

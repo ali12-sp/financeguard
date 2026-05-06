@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,19 @@ plugins {
 
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+}
+
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun signingProperty(name: String, envName: String): String? {
+    return (keystoreProperties.getProperty(name) ?: System.getenv(envName))
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 }
 
 android {
@@ -23,9 +38,30 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            val storePath = signingProperty("storeFile", "ANDROID_KEYSTORE_PATH")
+            val storePasswordValue = signingProperty("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+            val keyAliasValue = signingProperty("keyAlias", "ANDROID_KEY_ALIAS")
+            val keyPasswordValue = signingProperty("keyPassword", "ANDROID_KEY_PASSWORD")
+
+            if (storePath != null && storePasswordValue != null && keyAliasValue != null && keyPasswordValue != null) {
+                storeFile = file(storePath)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

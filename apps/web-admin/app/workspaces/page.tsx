@@ -27,6 +27,7 @@ interface WorkspaceRow {
     supportWhatsapp?: string;
     agentApkDownloadUrl?: string;
     agentApkChecksum?: string;
+    frpGoogleAccounts?: string[];
   };
   adminCount: number;
   staffCount: number;
@@ -68,6 +69,7 @@ interface WorkspaceFormState {
   supportWhatsapp: string;
   agentApkDownloadUrl: string;
   agentApkChecksum: string;
+  frpGoogleAccountsText: string;
   adminName: string;
   adminEmail: string;
   adminPhone: string;
@@ -89,11 +91,23 @@ const emptyForm: WorkspaceFormState = {
   supportWhatsapp: '',
   agentApkDownloadUrl: '',
   agentApkChecksum: '',
+  frpGoogleAccountsText: '',
   adminName: '',
   adminEmail: '',
   adminPhone: '',
   adminPassword: ''
 };
+
+function parseFrpGoogleAccounts(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+}
 
 function toEditorForm(row: WorkspaceRow): WorkspaceFormState {
   return {
@@ -111,6 +125,7 @@ function toEditorForm(row: WorkspaceRow): WorkspaceFormState {
     supportWhatsapp: row.settings.supportWhatsapp || '',
     agentApkDownloadUrl: row.settings.agentApkDownloadUrl || '',
     agentApkChecksum: row.settings.agentApkChecksum || '',
+    frpGoogleAccountsText: (row.settings.frpGoogleAccounts ?? []).join('\n'),
     adminName: row.primaryAdmin?.name || '',
     adminEmail: row.primaryAdmin?.email || '',
     adminPhone: row.primaryAdmin?.phone || '',
@@ -202,7 +217,8 @@ export default function WorkspacesPage() {
           supportPhone: form.supportPhone || undefined,
           supportWhatsapp: form.supportWhatsapp || undefined,
           agentApkDownloadUrl: form.agentApkDownloadUrl || undefined,
-          agentApkChecksum: form.agentApkChecksum || undefined
+          agentApkChecksum: form.agentApkChecksum || undefined,
+          frpGoogleAccounts: parseFrpGoogleAccounts(form.frpGoogleAccountsText)
         }
       });
       setForm(emptyForm);
@@ -244,7 +260,8 @@ export default function WorkspacesPage() {
           supportPhone: editorForm.supportPhone || '',
           supportWhatsapp: editorForm.supportWhatsapp || '',
           agentApkDownloadUrl: editorForm.agentApkDownloadUrl || '',
-          agentApkChecksum: editorForm.agentApkChecksum || ''
+          agentApkChecksum: editorForm.agentApkChecksum || '',
+          frpGoogleAccounts: parseFrpGoogleAccounts(editorForm.frpGoogleAccountsText)
         }
       });
       setStatus(`${editorForm.organizationName} updated successfully.`);
@@ -406,6 +423,11 @@ export default function WorkspacesPage() {
               onChange={(event) => updateForm(setForm, 'agentApkChecksum', event.target.value)}
               placeholder="Agent APK SHA-256 checksum"
             />
+            <textarea
+              value={form.frpGoogleAccountsText}
+              onChange={(event) => updateForm(setForm, 'frpGoogleAccountsText', event.target.value)}
+              placeholder="FRP Google accounts (one email per line)"
+            />
             <input
               value={form.defaultLockMessage}
               onChange={(event) => updateForm(setForm, 'defaultLockMessage', event.target.value)}
@@ -524,6 +546,11 @@ export default function WorkspacesPage() {
                 value={editorForm.agentApkChecksum}
                 onChange={(event) => updateEditorForm('agentApkChecksum', event.target.value)}
                 placeholder="Agent APK SHA-256 checksum"
+              />
+              <textarea
+                value={editorForm.frpGoogleAccountsText}
+                onChange={(event) => updateEditorForm('frpGoogleAccountsText', event.target.value)}
+                placeholder="FRP Google accounts (one email per line)"
               />
               <textarea
                 value={editorForm.defaultLockMessage}

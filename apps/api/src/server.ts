@@ -19,6 +19,7 @@ import { requireAuth, requirePlatformOwner, requireStaffAccess } from './middlew
 import { createRateLimiter } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security.js';
 import { getSchedulerStatus, runInstallmentScheduler } from './services/scheduler.js';
+import { getMetricsSnapshot, recordHttpRequest, renderPrometheusMetrics } from './services/metrics.js';
 
 const app = express();
 
@@ -42,6 +43,17 @@ app.use(cors(corsOptions));
 app.use(securityHeaders);
 app.use(morgan('dev'));
 app.use(express.json({ limit: env.bodySizeLimit }));
+app.use((req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    const route = req.route?.path
+      ? `${req.baseUrl || ''}${req.route.path}`
+      : req.path;
+    recordHttpRequest(req.method, route, res.statusCode, durationMs);
+  });
+  next();
+});
 app.use('/api', createRateLimiter({
   keyPrefix: 'api',
   windowMs: env.rateLimitWindowMs,
@@ -74,6 +86,14 @@ app.get('/api/health/ready', (_req, res) => {
   });
 });
 
+app.get('/api/metrics', requireAuth, requirePlatformOwner, (_req, res) => {
+  res.json(getMetricsSnapshot());
+});
+
+app.get('/api/metrics/prometheus', requireAuth, requirePlatformOwner, (_req, res) => {
+  res.type('text/plain').send(renderPrometheusMetrics());
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/setup', setupRoutes);
 app.use('/api/platform', requireAuth, requirePlatformOwner, platformRoutes);
@@ -100,20 +120,22 @@ app.listen(env.port, () => {
   console.log(`FinanceGuard API running on http://localhost:${env.port}`);
 });
 
-runInstallmentScheduler().catch((error) => {
-  console.error('Initial scheduler run failed', error);
-});
-
-setInterval(() => {
+if (env.runBackgroundJobs) {
   runInstallmentScheduler().catch((error) => {
-    console.error('Scheduled reminder run failed', error);
+    console.error('Initial scheduler run failed', error);
   });
-}, env.schedulerIntervalMs);
 
-if (env.backupIntervalMs > 0) {
   setInterval(() => {
-    createBackupSnapshot().catch((error) => {
-      console.error('Scheduled backup run failed', error);
+    runInstallmentScheduler().catch((error) => {
+      console.error('Scheduled reminder run failed', error);
     });
-  }, env.backupIntervalMs);
+  }, env.schedulerIntervalMs);
+
+  if (env.backupIntervalMs > 0) {
+    setInterval(() => {
+      createBackupSnapshot().catch((error) => {
+        console.error('Scheduled backup run failed', error);
+      });
+    }, env.backupIntervalMs);
+  }
 }

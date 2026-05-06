@@ -17,5 +17,8 @@ apps/android-agent/.gradle
 apps/android-agent/build
 apps/android-agent/app/build
 apps/android-agent/local.properties
+apps/android-agent/keystore.properties
+*.jks
+*.keystore
 tools/gradle-8.7
 tools/gradle-8.7-bin.zip

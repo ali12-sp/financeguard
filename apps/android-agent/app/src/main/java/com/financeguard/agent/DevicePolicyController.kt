@@ -1,6 +1,7 @@
 package com.financeguard.agent
 
 import android.app.admin.DevicePolicyManager
+import android.app.admin.FactoryResetProtectionPolicy
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -18,7 +19,7 @@ class DevicePolicyController(
         return dpm?.isDeviceOwnerApp(context.packageName) == true
     }
 
-    fun finishProvisioning(organizationName: String, organizationId: String) {
+    fun finishProvisioning(organizationName: String, organizationId: String, frpAccountsCsv: String = "") {
         if (!isDeviceOwner()) return
 
         runCatching {
@@ -31,6 +32,7 @@ class DevicePolicyController(
                 dpm?.setOrganizationId(organizationId)
             }
         }
+        applyFrpPolicy(frpAccountsCsv)
         enforceManagedBaseline()
     }
 
@@ -144,6 +146,30 @@ class DevicePolicyController(
     private fun applyUserRestriction(restriction: String) {
         runCatching {
             dpm?.addUserRestriction(admin, restriction)
+        }
+    }
+
+    private fun applyFrpPolicy(frpAccountsCsv: String) {
+        if (!isDeviceOwner() || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return
+        }
+
+        val accounts = frpAccountsCsv
+            .split(",")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+
+        runCatching {
+            if (accounts.isEmpty()) {
+                dpm?.setFactoryResetProtectionPolicy(admin, null)
+            } else {
+                val policy = FactoryResetProtectionPolicy.Builder()
+                    .setFactoryResetProtectionAccounts(accounts)
+                    .setFactoryResetProtectionEnabled(true)
+                    .build()
+                dpm?.setFactoryResetProtectionPolicy(admin, policy)
+            }
         }
     }
 }

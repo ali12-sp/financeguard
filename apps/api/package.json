@@ -8,9 +8,12 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/worker.ts",
     "build": "node --max-old-space-size=2048 ../../node_modules/typescript/bin/tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "worker": "node dist/worker.js",
     "backup": "npm run build && node dist/backup.js",
+    "restore": "npm run build && node dist/restore.js",
     "test": "npm run build && node dist/verify.js"
   },
   "dependencies": {

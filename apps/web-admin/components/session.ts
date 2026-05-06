@@ -12,6 +12,7 @@ export interface WorkspaceSettings {
   supportWhatsapp?: string;
   agentApkDownloadUrl?: string;
   agentApkChecksum?: string;
+  frpGoogleAccounts?: string[];
 }
 
 export interface SessionUser {

@@ -1,6 +1,7 @@
 import {
   addNotification,
   db,
+  persistDb,
   type NotificationChannel,
   type NotificationRecord
 } from '../db/mock-db.js';
@@ -88,23 +89,22 @@ async function deliverWebhook(
   }
 }
 
-function createNotificationRecord(
+function queueNotification(
   channel: NotificationChannel,
-  result: DeliveryResult,
-  options: NotificationOptions
+  options: NotificationOptions,
+  providerResponse = 'Queued for background delivery.'
 ) {
   return addNotification({
     tenantId: options.tenantId,
     channel,
-    status: result.status,
+    status: 'QUEUED',
     recipient: options.recipient,
     customerId: options.customerId,
     deviceId: options.deviceId,
     contractId: options.contractId,
     message: options.message,
     template: options.template,
-    providerResponse: result.providerResponse,
-    sentAt: result.status === 'SENT' ? new Date().toISOString() : undefined
+    providerResponse
   });
 }
 
@@ -133,66 +133,19 @@ export function recordSystemNotification(options: {
   });
 }
 
-async function deliverSms(phone: string, message: string) {
-  return deliverWebhook(
-    env.smsWebhookUrl,
-    env.smsApiKey,
-    {
-      to: phone,
-      message,
-      senderId: env.smsSenderId
-    },
-    'SMS_WEBHOOK_URL is not configured.'
-  );
+export function queueSmsNotification(options: NotificationOptions) {
+  return queueNotification('SMS', options);
 }
 
-async function deliverEmail(email: string, subject: string, message: string) {
-  return deliverWebhook(
-    env.emailWebhookUrl,
-    env.emailApiKey,
-    {
-      to: email,
-      subject,
-      message,
-      from: env.emailSender
-    },
-    'EMAIL_WEBHOOK_URL is not configured.'
-  );
+export function queueEmailNotification(options: NotificationOptions) {
+  return queueNotification('EMAIL', options);
 }
 
-async function deliverWhatsApp(phone: string, message: string) {
-  return deliverWebhook(
-    env.whatsappWebhookUrl,
-    env.whatsappApiKey,
-    {
-      to: phone,
-      message,
-      senderId: env.whatsappSenderId
-    },
-    'WHATSAPP_WEBHOOK_URL is not configured.'
-  );
+export function queueWhatsappNotification(options: NotificationOptions) {
+  return queueNotification('WHATSAPP', options);
 }
 
-export async function sendSmsNotification(options: NotificationOptions) {
-  const result = await deliverSms(options.recipient, options.message);
-  return createNotificationRecord('SMS', result, options);
-}
-
-export async function sendEmailNotification(options: NotificationOptions) {
-  const result = await deliverEmail(
-    options.recipient,
-    options.subject ?? 'FinanceGuard alert',
-    options.message
-  );
-  return createNotificationRecord('EMAIL', result, options);
-}
-
-export async function sendWhatsappNotification(options: NotificationOptions) {
-  const result = await deliverWhatsApp(options.recipient, options.message);
-  return createNotificationRecord('WHATSAPP', result, options);
-}
-
-export async function sendSmsReminder(options: {
+export function sendSmsReminder(options: {
   tenantId: string;
   phone: string;
   customerId: string;
@@ -200,7 +153,7 @@ export async function sendSmsReminder(options: {
   message: string;
   template: string;
 }) {
-  return sendSmsNotification({
+  return queueSmsNotification({
     tenantId: options.tenantId,
     recipient: options.phone,
     customerId: options.customerId,
@@ -264,9 +217,9 @@ export async function sendDeviceRegistrationNotifications(options: {
     options.subject ??
     `FinanceGuard device alert for ${tenant.name}`;
 
-  const jobs = [
+  const queued = [
     ...recipients.email.map((recipient) =>
-      sendEmailNotification({
+      queueEmailNotification({
         tenantId: options.tenantId,
         recipient,
         customerId: options.customerId,
@@ -278,7 +231,7 @@ export async function sendDeviceRegistrationNotifications(options: {
       })
     ),
     ...recipients.sms.map((recipient) =>
-      sendSmsNotification({
+      queueSmsNotification({
         tenantId: options.tenantId,
         recipient,
         customerId: options.customerId,
@@ -289,7 +242,7 @@ export async function sendDeviceRegistrationNotifications(options: {
       })
     ),
     ...recipients.whatsapp.map((recipient) =>
-      sendWhatsappNotification({
+      queueWhatsappNotification({
         tenantId: options.tenantId,
         recipient,
         customerId: options.customerId,
@@ -301,5 +254,115 @@ export async function sendDeviceRegistrationNotifications(options: {
     )
   ];
 
-  return Promise.all(jobs);
+  await persistDb();
+  return queued;
+}
+
+async function deliverSms(phone: string, message: string) {
+  return deliverWebhook(
+    env.smsWebhookUrl,
+    env.smsApiKey,
+    {
+      to: phone,
+      message,
+      senderId: env.smsSenderId
+    },
+    'SMS_WEBHOOK_URL is not configured.'
+  );
+}
+
+async function deliverEmail(email: string, subject: string, message: string) {
+  return deliverWebhook(
+    env.emailWebhookUrl,
+    env.emailApiKey,
+    {
+      to: email,
+      subject,
+      message,
+      from: env.emailSender
+    },
+    'EMAIL_WEBHOOK_URL is not configured.'
+  );
+}
+
+async function deliverWhatsApp(phone: string, message: string) {
+  return deliverWebhook(
+    env.whatsappWebhookUrl,
+    env.whatsappApiKey,
+    {
+      to: phone,
+      message,
+      senderId: env.whatsappSenderId
+    },
+    'WHATSAPP_WEBHOOK_URL is not configured.'
+  );
+}
+
+async function dispatchNotification(notification: NotificationRecord) {
+  if (notification.channel === 'SYSTEM' || notification.channel === 'FCM') {
+    notification.status = 'SKIPPED';
+    notification.providerResponse = `${notification.channel} notifications are not dispatched by the background notification worker.`;
+    return notification;
+  }
+
+  const result =
+    notification.channel === 'SMS'
+      ? await deliverSms(notification.recipient, notification.message)
+      : notification.channel === 'EMAIL'
+        ? await deliverEmail(notification.recipient, 'FinanceGuard alert', notification.message)
+        : await deliverWhatsApp(notification.recipient, notification.message);
+
+  notification.status = result.status;
+  notification.providerResponse = result.providerResponse;
+  notification.sentAt = result.status === 'SENT' ? new Date().toISOString() : undefined;
+  return notification;
+}
+
+export async function processQueuedNotifications(limit = 25) {
+  const queued = db.notifications
+    .filter((item) => item.status === 'QUEUED')
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(0, limit);
+
+  if (queued.length === 0) {
+    return {
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0
+    };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const notification of queued) {
+    const result = await dispatchNotification(notification);
+    if (result.status === 'SENT') {
+      sent += 1;
+    } else if (result.status === 'FAILED') {
+      failed += 1;
+    } else if (result.status === 'SKIPPED') {
+      skipped += 1;
+    }
+  }
+
+  await persistDb();
+
+  return {
+    processed: queued.length,
+    sent,
+    failed,
+    skipped
+  };
+}
+
+export function getNotificationQueueStats() {
+  return {
+    queued: db.notifications.filter((item) => item.status === 'QUEUED').length,
+    sent: db.notifications.filter((item) => item.status === 'SENT').length,
+    failed: db.notifications.filter((item) => item.status === 'FAILED').length,
+    skipped: db.notifications.filter((item) => item.status === 'SKIPPED').length
+  };
 }

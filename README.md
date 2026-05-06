@@ -6,11 +6,13 @@ It includes:
 
 - web admin dashboard
 - backend API and scheduler
+- background worker for scheduler, queued notifications, and backups
 - Android Device Owner agent
 - reminder, lock, and unlock workflows
 - FCM command delivery hooks
 - SMS fallback hooks
 - provisioning payload support for QR and ADB enrollment
+- workspace-managed QR generation, APK URL/checksum storage, and FRP account policy
 
 ## Project structure
 
@@ -28,6 +30,7 @@ It includes:
 - **Android:** Kotlin
 - **Auth:** JWT with first-run platform-owner setup and workspace-aware login
 - **Realtime / sync:** scheduler, polling fallback, FCM hooks
+- **Ops:** background worker, metrics endpoints, backup + restore tooling
 
 ## Quick start
 
@@ -117,6 +120,7 @@ This stack includes:
 
 - PostgreSQL
 - API container
+- worker container
 - web admin container
 - Nginx reverse proxy
 
@@ -136,6 +140,8 @@ This stack includes:
 - audit logs, command logs, notification logs
 - external registration alerts by email, SMS, and WhatsApp webhook integrations
 - editable workspace defaults with test-alert delivery from the platform owner console
+- queued notification delivery with a separate worker entrypoint
+- platform-owner metrics endpoints and backup restore tooling
 - Docker production stack with PostgreSQL and reverse-proxy routing
 
 ## Android note
@@ -163,3 +169,7 @@ Read the full setup and enrollment instructions here:
 4. add zero-touch enrollment for bulk rollout
 5. add a background worker process if you want notification fan-out and scheduler work separated from the API
 6. enable HTTPS on your front proxy or cloud load balancer before onboarding real customers
+
+## Hardening guide
+
+- [Production Hardening](./docs/PRODUCTION_HARDENING.md)

@@ -173,12 +173,14 @@ router.get('/:id/provisioning', (req, res) => {
     adminComponent: 'com.financeguard.agent/.FinanceGuardDeviceAdminReceiver',
     apiBaseUrl: env.publicApiUrl,
     organizationId: tenant?.slug ?? tenantId,
+    frpGoogleAccounts: tenant?.settings.frpGoogleAccounts ?? [],
     adminExtras: {
       apiBaseUrl: env.publicApiUrl,
       agentSecret: device.agentSecret,
       deviceId: device.id,
       organizationId: tenant?.slug ?? tenantId,
-      organizationName: tenant?.name ?? 'FinanceGuard Workspace'
+      organizationName: tenant?.name ?? 'FinanceGuard Workspace',
+      frpAccountsCsv: (tenant?.settings.frpGoogleAccounts ?? []).join(',')
     },
     adbCommand:
       'adb shell dpm set-device-owner com.financeguard.agent/.FinanceGuardDeviceAdminReceiver',

@@ -47,6 +47,7 @@ export interface WorkspaceSettings {
   supportWhatsapp?: string;
   agentApkDownloadUrl?: string;
   agentApkChecksum?: string;
+  frpGoogleAccounts?: string[];
 }
 
 export interface TenantRecord {
@@ -266,6 +267,14 @@ function formatMonthLabel(date: Date) {
 export function buildDefaultWorkspaceSettings(
   overrides: Partial<WorkspaceSettings> = {}
 ): WorkspaceSettings {
+  const frpGoogleAccounts = Array.from(
+    new Set(
+      (overrides.frpGoogleAccounts ?? [])
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
   return {
     defaultDueDayOfMonth: overrides.defaultDueDayOfMonth ?? 10,
     defaultGraceDays: overrides.defaultGraceDays ?? 3,
@@ -278,7 +287,8 @@ export function buildDefaultWorkspaceSettings(
     supportPhone: overrides.supportPhone?.trim() || undefined,
     supportWhatsapp: overrides.supportWhatsapp?.trim() || undefined,
     agentApkDownloadUrl: overrides.agentApkDownloadUrl?.trim() || undefined,
-    agentApkChecksum: overrides.agentApkChecksum?.trim() || undefined
+    agentApkChecksum: overrides.agentApkChecksum?.trim() || undefined,
+    frpGoogleAccounts: frpGoogleAccounts.length > 0 ? frpGoogleAccounts : undefined
   };
 }
 
@@ -850,7 +860,8 @@ async function ensureWorkspaceSettingsMigration() {
       supportPhone: tenant.settings.supportPhone ?? tenant.contactPhone,
       supportWhatsapp: tenant.settings.supportWhatsapp,
       agentApkDownloadUrl: tenant.settings.agentApkDownloadUrl,
-      agentApkChecksum: tenant.settings.agentApkChecksum
+      agentApkChecksum: tenant.settings.agentApkChecksum,
+      frpGoogleAccounts: tenant.settings.frpGoogleAccounts
     });
 
     if (JSON.stringify(normalized) !== JSON.stringify(tenant.settings)) {
