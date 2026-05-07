@@ -43,6 +43,7 @@ export default function DevicesPage() {
     agentApkDownloadUrl?: string;
     agentApkChecksum?: string;
     qrPayload?: string;
+    qrPayloadPretty?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -52,9 +53,9 @@ export default function DevicesPage() {
     }
 
     QRCode.toDataURL(provisioning.qrPayload, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 320
+      errorCorrectionLevel: 'L',
+      margin: 2,
+      width: 420
     })
       .then(setQrCodeDataUrl)
       .catch(() => setQrCodeDataUrl(''));
@@ -129,21 +130,24 @@ export default function DevicesPage() {
       const workspaceSettings = getStoredUser()?.workspaceSettings;
       const agentApkDownloadUrl = workspaceSettings?.agentApkDownloadUrl?.trim() || undefined;
       const agentApkChecksum = workspaceSettings?.agentApkChecksum?.trim() || undefined;
-      const qrPayload =
+      const qrPayloadData =
         agentApkDownloadUrl && agentApkChecksum
-          ? JSON.stringify({
+          ? {
               'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': details.adminComponent,
               'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': agentApkDownloadUrl,
               'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM': agentApkChecksum,
               'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': details.adminExtras
-            }, null, 2)
+            }
           : undefined;
+      const qrPayload = qrPayloadData ? JSON.stringify(qrPayloadData) : undefined;
+      const qrPayloadPretty = qrPayloadData ? JSON.stringify(qrPayloadData, null, 2) : undefined;
 
       setProvisioning({
         ...details,
         agentApkDownloadUrl,
         agentApkChecksum,
-        qrPayload
+        qrPayload,
+        qrPayloadPretty
       });
       setStatus(`Provisioning details loaded for ${deviceId}.`);
     } catch (error) {
@@ -212,7 +216,7 @@ export default function DevicesPage() {
                   <strong>Provisioning JSON</strong>
                   <textarea
                     readOnly
-                    value={provisioning.qrPayload}
+                    value={provisioning.qrPayloadPretty ?? provisioning.qrPayload}
                     style={{ minHeight: 280, marginTop: 12 }}
                   />
                 </div>
