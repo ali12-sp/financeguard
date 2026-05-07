@@ -28,10 +28,26 @@ android {
 
     defaultConfig {
         applicationId = "com.financeguard.agent"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+    }
+
+    flavorDimensions += "deviceSupport"
+
+    productFlavors {
+        create("legacy") {
+            dimension = "deviceSupport"
+            minSdk = 24
+            versionNameSuffix = "-legacy"
+        }
+
+        create("modern") {
+            dimension = "deviceSupport"
+            minSdk = 26
+            versionNameSuffix = "-modern"
+        }
     }
 
     buildFeatures {
