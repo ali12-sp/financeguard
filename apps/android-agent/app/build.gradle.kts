@@ -32,6 +32,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
     }
 
     flavorDimensions += "deviceSupport"
@@ -75,8 +76,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
+
         release {
-            isMinifyEnabled = false
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

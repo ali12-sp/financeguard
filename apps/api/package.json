@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -14,7 +14,7 @@
     "worker": "node dist/worker.js",
     "backup": "npm run build && node dist/backup.js",
     "restore": "npm run build && node dist/restore.js",
-    "test": "npm run build && node dist/verify.js"
+    "test": "npm run build && node dist/verify.js && node dist/modules/contracts/ledger.test.js && node dist/services/passwords.test.js && node dist/services/secrets.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

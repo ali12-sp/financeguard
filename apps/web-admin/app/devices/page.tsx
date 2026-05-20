@@ -19,6 +19,9 @@ interface Device {
   remainingBalance: number;
   restrictionReason?: string;
   pushToken?: string;
+  manualUnlockUntil?: string;
+  manualUnlockReason?: string;
+  manualUnlockActive?: boolean;
 }
 
 export default function DevicesPage() {
@@ -104,6 +107,44 @@ export default function DevicesPage() {
       loadDevices();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Device action failed');
+    }
+  }
+
+  async function requestSync(deviceId: string) {
+    setStatus('Queueing sync command...');
+
+    try {
+      await apiPost(`/devices/${deviceId}/commands`, {
+        type: 'SYNC',
+        reason: 'Admin requested device sync from the dashboard.'
+      });
+      setStatus(`Sync command queued for ${deviceId}.`);
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to queue sync command');
+    }
+  }
+
+  async function overrideUnlock(row: Device) {
+    const reason = window.prompt(
+      'Reason for manual unlock override',
+      row.restrictionReason || row.manualUnlockReason || 'Customer disputed this lock.'
+    );
+    if (!reason?.trim()) {
+      return;
+    }
+
+    setStatus('Applying manual unlock override...');
+
+    try {
+      await apiPost(`/devices/${row.id}/manual-unlock`, {
+        reason: reason.trim(),
+        hours: 24
+      });
+      setStatus(`Manual unlock override applied to ${row.id} for 24 hours.`);
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to apply manual unlock override');
     }
   }
 
@@ -244,6 +285,7 @@ export default function DevicesPage() {
               <th>Delivery</th>
               <th>Balance</th>
               <th>Reason</th>
+              <th>Override</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -265,6 +307,16 @@ export default function DevicesPage() {
                 <td>{formatCurrency(row.remainingBalance)}</td>
                 <td>{row.restrictionReason || '-'}</td>
                 <td>
+                  {row.manualUnlockUntil ? (
+                    <div>
+                      <span className={`badge ${row.manualUnlockActive ? 'active' : 'pending'}`}>
+                        {row.manualUnlockActive ? 'ACTIVE' : 'EXPIRED'}
+                      </span>
+                      <div className="inline-note">{new Date(row.manualUnlockUntil).toLocaleString()}</div>
+                    </div>
+                  ) : '-'}
+                </td>
+                <td>
                   <div className="button-row">
                     <button
                       type="button"
@@ -279,6 +331,20 @@ export default function DevicesPage() {
                       onClick={() => changeState(row.id, 'ACTIVE')}
                     >
                       Unlock
+                    </button>
+                    <button
+                      type="button"
+                      className="success-button"
+                      onClick={() => overrideUnlock(row)}
+                    >
+                      Override 24h
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => requestSync(row.id)}
+                    >
+                      Sync
                     </button>
                     <button
                       type="button"

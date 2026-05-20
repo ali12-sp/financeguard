@@ -70,6 +70,7 @@ export function getStoredUser() {
       tenantName?: string;
       tenantSlug?: string;
       isPlatformOwner?: boolean;
+      mustChangePassword?: boolean;
       workspaceSettings?: {
         defaultDueDayOfMonth: number;
         defaultGraceDays: number;
@@ -95,9 +96,10 @@ export function storeSession(payload: {
     role: string;
     tenantId: string;
     tenantName?: string;
-    tenantSlug?: string;
-    isPlatformOwner?: boolean;
-    workspaceSettings?: {
+      tenantSlug?: string;
+      isPlatformOwner?: boolean;
+      mustChangePassword?: boolean;
+      workspaceSettings?: {
       defaultDueDayOfMonth: number;
       defaultGraceDays: number;
       defaultEnrollmentMode: 'ADB' | 'QR' | 'ZERO_TOUCH' | 'MANUAL';
@@ -155,4 +157,32 @@ export async function apiPatch<T>(path: string, body?: unknown, init?: RequestIn
     method: 'PATCH',
     body: body === undefined ? undefined : JSON.stringify(body)
   });
+}
+
+export async function apiDownload(path: string, filename: string) {
+  const headers = new Headers();
+  const token = getStoredToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${getApiUrl()}${path}`, {
+    headers,
+    cache: 'no-store'
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => null);
+    throw new Error(buildErrorMessage(error, res.status));
+  }
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }

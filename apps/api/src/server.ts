@@ -15,7 +15,14 @@ import auditLogRoutes from './modules/audit-logs/routes.js';
 import policyRoutes from './modules/policies/routes.js';
 import agentRoutes from './modules/agent/routes.js';
 import portalRoutes from './modules/portal/routes.js';
-import { requireAuth, requirePlatformOwner, requireStaffAccess } from './middleware/auth.js';
+import reportRoutes from './modules/reports/routes.js';
+import exportRoutes from './modules/exports/routes.js';
+import {
+  requireAuth,
+  requirePasswordChangeSatisfied,
+  requirePlatformOwner,
+  requireStaffAccess
+} from './middleware/auth.js';
 import { createRateLimiter } from './middleware/rate-limit.js';
 import { securityHeaders } from './middleware/security.js';
 import { getSchedulerStatus, runInstallmentScheduler } from './services/scheduler.js';
@@ -86,26 +93,28 @@ app.get('/api/health/ready', (_req, res) => {
   });
 });
 
-app.get('/api/metrics', requireAuth, requirePlatformOwner, (_req, res) => {
+app.get('/api/metrics', requireAuth, requirePasswordChangeSatisfied, requirePlatformOwner, (_req, res) => {
   res.json(getMetricsSnapshot());
 });
 
-app.get('/api/metrics/prometheus', requireAuth, requirePlatformOwner, (_req, res) => {
+app.get('/api/metrics/prometheus', requireAuth, requirePasswordChangeSatisfied, requirePlatformOwner, (_req, res) => {
   res.type('text/plain').send(renderPrometheusMetrics());
 });
 
 app.use('/api/auth', authRoutes);
 app.use('/api/setup', setupRoutes);
-app.use('/api/platform', requireAuth, requirePlatformOwner, platformRoutes);
+app.use('/api/platform', requireAuth, requirePasswordChangeSatisfied, requirePlatformOwner, platformRoutes);
 app.use('/api/agent', agentRoutes);
-app.use('/api/portal', requireAuth, portalRoutes);
-app.use('/api/customers', requireAuth, requireStaffAccess, customerRoutes);
-app.use('/api/guarantors', requireAuth, requireStaffAccess, guarantorRoutes);
-app.use('/api/devices', requireAuth, requireStaffAccess, deviceRoutes);
-app.use('/api/contracts', requireAuth, requireStaffAccess, contractRoutes);
-app.use('/api/payments', requireAuth, requireStaffAccess, paymentRoutes);
-app.use('/api/audit-logs', requireAuth, requireStaffAccess, auditLogRoutes);
-app.use('/api/policies', requireAuth, requireStaffAccess, policyRoutes);
+app.use('/api/portal', requireAuth, requirePasswordChangeSatisfied, portalRoutes);
+app.use('/api/customers', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, customerRoutes);
+app.use('/api/guarantors', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, guarantorRoutes);
+app.use('/api/devices', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, deviceRoutes);
+app.use('/api/contracts', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, contractRoutes);
+app.use('/api/payments', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, paymentRoutes);
+app.use('/api/audit-logs', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, auditLogRoutes);
+app.use('/api/policies', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, policyRoutes);
+app.use('/api/reports', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, reportRoutes);
+app.use('/api/exports', requireAuth, requirePasswordChangeSatisfied, requireStaffAccess, exportRoutes);
 
 app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (error.message.startsWith('Origin not allowed:')) {

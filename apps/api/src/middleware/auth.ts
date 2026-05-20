@@ -13,6 +13,7 @@ export interface AuthRequest extends Request {
     tenantSlug?: string;
     isPlatformOwner?: boolean;
     workspaceSettings?: WorkspaceSettings;
+    mustChangePassword?: boolean;
     customerId?: string;
   };
 }
@@ -52,6 +53,21 @@ export function requirePlatformOwner(req: AuthRequest, res: Response, next: Next
 
   if (!req.user.isPlatformOwner) {
     return res.status(403).json({ message: 'Platform owner access required' });
+  }
+
+  next();
+}
+
+export function requirePasswordChangeSatisfied(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Missing authenticated user' });
+  }
+
+  if (req.user.mustChangePassword) {
+    return res.status(403).json({
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      message: 'Password change is required before using this account.'
+    });
   }
 
   next();

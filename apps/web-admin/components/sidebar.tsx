@@ -10,13 +10,16 @@ const adminLinks = [
   { href: '/guarantors', label: 'Guarantors' },
   { href: '/contracts', label: 'Contracts' },
   { href: '/payments', label: 'Payments' },
+  { href: '/reports', label: 'Reports & Exports' },
   { href: '/devices', label: 'Devices' },
   { href: '/late-payments', label: 'Late Payments' },
-  { href: '/audit-logs', label: 'Audit Logs' }
+  { href: '/audit-logs', label: 'Audit Logs' },
+  { href: '/change-password', label: 'Security' }
 ];
 
 const customerLinks = [
-  { href: '/customer', label: 'My Account' }
+  { href: '/customer', label: 'My Account' },
+  { href: '/change-password', label: 'Security' }
 ];
 
 interface SidebarProps {

@@ -9,6 +9,7 @@ import {
   recordSystemNotification,
   sendDeviceRegistrationNotifications
 } from '../../services/notifications.js';
+import { isDeviceSyncStale } from '../../services/device-health.js';
 
 const router = Router();
 
@@ -126,6 +127,7 @@ function getWorkspaceSummary(tenantId: string) {
     customerCount: customers.length,
     deviceCount: devices.length,
     enrolledDeviceCount: devices.filter((item) => item.enrollmentStatus === 'ENROLLED').length,
+    staleDeviceCount: devices.filter((item) => isDeviceSyncStale(item)).length,
     contractCount: contracts.length,
     activeContractCount: contracts.filter(
       (item) => item.status !== 'COMPLETED' && item.status !== 'CANCELLED'
@@ -240,6 +242,7 @@ router.get('/summary', (_req, res) => {
     customers: db.customers.length,
     devices: db.devices.length,
     enrolledDevices: deviceSummaries.filter((item) => item.enrollmentStatus === 'ENROLLED').length,
+    staleDevices: db.devices.filter((item) => isDeviceSyncStale(item)).length,
     contracts: db.contracts.length,
     activeContracts: contractSummaries.filter(
       (item) => item.status !== 'COMPLETED' && item.status !== 'CANCELLED'
@@ -488,6 +491,7 @@ router.post('/workspaces', asyncHandler(async (req, res) => {
     phone: parsed.data.adminPhone?.trim(),
     password: hashPassword(parsed.data.adminPassword),
     role: 'admin',
+    mustChangePassword: true,
     isPlatformOwner: false
   });
 

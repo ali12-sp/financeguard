@@ -57,7 +57,7 @@ export default function LoginPage() {
     }
 
     setSession(data.token, data.user);
-    router.push(getDefaultRouteForRole(data.user.role));
+    router.push(data.user.mustChangePassword ? '/change-password' : getDefaultRouteForRole(data.user.role));
   }
 
   if (!setupChecked) {

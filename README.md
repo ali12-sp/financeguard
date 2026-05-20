@@ -6,7 +6,7 @@ It includes:
 
 - web admin dashboard
 - backend API and scheduler
-- background worker for scheduler, queued notifications, and backups
+- scheduler, queued notifications, and backups
 - Android Device Owner agent
 - reminder, lock, and unlock workflows
 - FCM command delivery hooks
@@ -30,12 +30,12 @@ It includes:
 - **Android:** Kotlin
 - **Auth:** JWT with first-run platform-owner setup and workspace-aware login
 - **Realtime / sync:** scheduler, polling fallback, FCM hooks
-- **Ops:** background worker, metrics endpoints, backup + restore tooling
+- **Ops:** single-process jobs, metrics endpoints, backup + restore tooling
 
 ## Quick start
 
 ### 1. Install Node.js
-Use Node.js 20.9 or newer. For production, prefer Node.js 22 LTS.
+Use Node.js 22.5 or newer. For production, prefer the current Node.js 22 LTS line.
 
 ### 2. Install dependencies
 ```bash
@@ -119,8 +119,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 This stack includes:
 
 - PostgreSQL
-- API container
-- worker container
+- API container with scheduler, notification queue, and backup jobs enabled
 - web admin container
 - Nginx reverse proxy
 
@@ -133,14 +132,18 @@ This stack includes:
 - onboard financed customers with phone + installment plan
 - persistent backend data in SQLite or PostgreSQL
 - record payments
+- track payment method, reference number, and receipt URL
 - automatic reminder and overdue-lock scheduler
 - manual lock / unlock from dashboard
 - Android agent registration and sync endpoints
 - provisioning payload endpoint for Android enrollment
 - audit logs, command logs, notification logs
+- first-login password-change gate for temporary admin and customer credentials
+- high-entropy Android agent enrollment secrets
+- stale-device health counts for phones that have not synced recently
 - external registration alerts by email, SMS, and WhatsApp webhook integrations
 - editable workspace defaults with test-alert delivery from the platform owner console
-- queued notification delivery with a separate worker entrypoint
+- queued notification delivery from the production API process
 - platform-owner metrics endpoints and backup restore tooling
 - Docker production stack with PostgreSQL and reverse-proxy routing
 
@@ -167,7 +170,7 @@ Read the full setup and enrollment instructions here:
 2. add release signing for the Android app
 3. host the APK on HTTPS for QR enrollment
 4. add zero-touch enrollment for bulk rollout
-5. add a background worker process if you want notification fan-out and scheduler work separated from the API
+5. keep the bundled single API process until the persistence layer is migrated to normalized relational tables
 6. enable HTTPS on your front proxy or cloud load balancer before onboarding real customers
 
 ## Hardening guide

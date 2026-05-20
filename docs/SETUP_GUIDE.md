@@ -365,11 +365,11 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 This gives you:
 
 - PostgreSQL
-- API container
+- API container with scheduler, notification queue, and backup jobs
 - web container
 - Nginx reverse proxy
 
-Use Node.js 22 LTS for production if you deploy without Docker.
+Use Node.js 22.5 or newer for production if you deploy without Docker.
 
 ## 14. SMS Fallback
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiFetch } from './api';
 import Sidebar from './sidebar';
 import {
@@ -26,6 +26,7 @@ export default function LayoutShell({
   allowedRoles = DEFAULT_ALLOWED_ROLES
 }: LayoutShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
   const allowedRolesKey = allowedRoles.join('|');
@@ -47,6 +48,13 @@ export default function LayoutShell({
       return;
     }
 
+    if (currentUser.mustChangePassword && pathname !== '/change-password') {
+      setUser(null);
+      setReady(false);
+      router.replace('/change-password');
+      return;
+    }
+
     setUser(currentUser);
     setReady(true);
 
@@ -58,6 +66,10 @@ export default function LayoutShell({
     apiFetch<{ user: SessionUser }>('/auth/me', token)
       .then(({ user: refreshedUser }) => {
         setSession(token, refreshedUser);
+        if (refreshedUser.mustChangePassword && pathname !== '/change-password') {
+          router.replace('/change-password');
+          return;
+        }
         setUser(refreshedUser);
       })
       .catch(() => {
@@ -66,7 +78,7 @@ export default function LayoutShell({
         setReady(false);
         router.replace('/login');
       });
-  }, [allowedRolesKey, router]);
+  }, [allowedRolesKey, pathname, router]);
 
   function handleLogout() {
     clearSession();

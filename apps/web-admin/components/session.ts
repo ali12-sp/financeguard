@@ -25,6 +25,7 @@ export interface SessionUser {
   tenantName?: string;
   tenantSlug?: string;
   isPlatformOwner?: boolean;
+  mustChangePassword?: boolean;
   workspaceSettings?: WorkspaceSettings;
   customerId?: string;
 }

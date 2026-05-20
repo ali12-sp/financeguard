@@ -12,6 +12,7 @@ import {
   syncContractState
 } from '../contracts/ledger.js';
 import { issueDeviceCommand } from '../../services/device-control.js';
+import { createPaymentReceiptPdf } from '../../services/pdf-documents.js';
 
 const router = Router();
 
@@ -27,11 +28,27 @@ router.get('/', (req, res) => {
   res.json(rows.map((payment) => getPaymentSummary(payment)));
 });
 
+router.get('/:id/receipt.pdf', (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const payment = scopeToTenant(db.payments, tenantId).find((item) => item.id === req.params.id);
+  if (!payment) {
+    return res.status(404).json({ message: 'Payment not found' });
+  }
+
+  const pdf = createPaymentReceiptPdf(payment);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="receipt-${payment.id}.pdf"`);
+  res.send(pdf);
+});
+
 router.post('/', asyncHandler(async (req, res) => {
   const schema = z.object({
     contractId: z.string(),
     principalAmount: z.number().positive(),
     lateFeeAmount: z.number().min(0).default(0),
+    paymentMethod: z.enum(['CASH', 'BANK_TRANSFER', 'EASYPAISA', 'JAZZCASH', 'CARD', 'OTHER']).default('CASH'),
+    referenceNumber: z.string().max(120).optional(),
+    receiptUrl: z.string().url().optional().or(z.literal('')),
     monthCovered: z.string().optional(),
     matchedBy: z.enum(['AUTO', 'MANUAL_OVERRIDE']).default('AUTO'),
     note: z.string().optional()
@@ -66,6 +83,9 @@ router.post('/', asyncHandler(async (req, res) => {
     receivedAmount: parsed.data.principalAmount + parsed.data.lateFeeAmount,
     principalApplied: parsed.data.principalAmount,
     lateFeeAmount: parsed.data.lateFeeAmount,
+    paymentMethod: parsed.data.paymentMethod,
+    referenceNumber: parsed.data.referenceNumber?.trim() || undefined,
+    receiptUrl: parsed.data.receiptUrl?.trim() || undefined,
     receivedAt: new Date().toISOString(),
     monthCovered,
     matchedBy: parsed.data.matchedBy,
@@ -86,7 +106,7 @@ router.post('/', asyncHandler(async (req, res) => {
     entityType: 'PAYMENT',
     entityId: payment.id,
     reason: 'Installment payment received',
-    details: `Rs. ${payment.principalApplied} principal and Rs. ${payment.lateFeeAmount} late fee were posted to ${monthCovered}.`
+    details: `Rs. ${payment.principalApplied} principal and Rs. ${payment.lateFeeAmount} late fee were posted to ${monthCovered}. Method: ${payment.paymentMethod}. Reference: ${payment.referenceNumber ?? 'n/a'}.`
   });
 
   addAuditLog({

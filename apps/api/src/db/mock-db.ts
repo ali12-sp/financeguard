@@ -15,6 +15,7 @@ export type EnrollmentMode = 'ADB' | 'QR' | 'ZERO_TOUCH' | 'MANUAL';
 export type ContractStatus = 'ACTIVE' | 'LATE' | 'RESTRICTED' | 'COMPLETED' | 'CANCELLED';
 export type InstallmentStatus = 'UPCOMING' | 'DUE' | 'GRACE' | 'OVERDUE' | 'PAID';
 export type PaymentMatchMode = 'AUTO' | 'MANUAL_OVERRIDE';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'EASYPAISA' | 'JAZZCASH' | 'CARD' | 'OTHER';
 export type AppRole = 'admin' | 'staff' | 'customer';
 export type AuditAction =
   | 'CUSTOMER_CREATED'
@@ -27,6 +28,9 @@ export type AuditAction =
   | 'DEVICE_UNLOCKED'
   | 'DEVICE_RELEASED'
   | 'MANUAL_OVERRIDE'
+  | 'PASSWORD_RESET'
+  | 'PORTAL_PAYMENT_NOTICE'
+  | 'UNLOCK_REVIEW_REQUESTED'
   | 'POLICY_RECOMPUTED';
 export type DeviceCommandType = 'LOCK' | 'UNLOCK' | 'REMINDER' | 'SYNC';
 export type DeviceCommandStatus = 'PENDING' | 'SENT' | 'ACKNOWLEDGED' | 'FAILED';
@@ -70,6 +74,7 @@ export interface UserRecord {
   password: string;
   role: AppRole;
   isPlatformOwner?: boolean;
+  mustChangePassword?: boolean;
   customerId?: string;
 }
 
@@ -115,6 +120,8 @@ export interface DeviceRecord {
   deviceOwnerPackage?: string;
   lastCommandId?: string;
   lastSyncAt?: string;
+  manualUnlockUntil?: string;
+  manualUnlockReason?: string;
 }
 
 export interface ContractRecord {
@@ -158,6 +165,9 @@ export interface PaymentRecord {
   receivedAmount: number;
   principalApplied: number;
   lateFeeAmount: number;
+  paymentMethod?: PaymentMethod;
+  referenceNumber?: string;
+  receiptUrl?: string;
   receivedAt: string;
   monthCovered: string;
   matchedBy: PaymentMatchMode;
@@ -172,7 +182,7 @@ export interface AuditLogRecord {
   actorUserId: string;
   actorName: string;
   action: AuditAction;
-  entityType: 'CUSTOMER' | 'GUARANTOR' | 'CONTRACT' | 'PAYMENT' | 'DEVICE' | 'POLICY';
+  entityType: 'CUSTOMER' | 'GUARANTOR' | 'CONTRACT' | 'PAYMENT' | 'DEVICE' | 'POLICY' | 'USER';
   entityId: string;
   reason: string;
   details?: string;

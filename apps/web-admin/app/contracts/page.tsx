@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import LayoutShell from '../../components/layout-shell';
-import { apiFetch } from '../../components/api';
+import { apiDownload, apiFetch } from '../../components/api';
 import { formatCurrency, formatDate } from '../../components/formatters';
 
 interface ContractRow {
@@ -25,6 +25,7 @@ interface ContractRow {
 
 export default function ContractsPage() {
   const [rows, setRows] = useState<ContractRow[]>([]);
+  const [status, setStatus] = useState('');
 
   useEffect(() => {
     apiFetch<ContractRow[]>('/contracts')
@@ -32,10 +33,19 @@ export default function ContractsPage() {
       .catch(console.error);
   }, []);
 
+  async function downloadInvoice(row: ContractRow) {
+    try {
+      await apiDownload(`/contracts/${row.id}/invoice.pdf`, `invoice-${row.id}.pdf`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to download invoice');
+    }
+  }
+
   return (
     <LayoutShell>
       <h1>Contracts</h1>
       <p className="page-copy">Every contract combines customer, device, guarantors, installment progress, policy state, and remaining financed balance.</p>
+      {status ? <p className="inline-note" style={{ marginTop: 12 }}>{status}</p> : null}
       <div className="card" style={{ marginTop: 20 }}>
         <div className="table-wrap">
           <table className="table">
@@ -51,6 +61,7 @@ export default function ContractsPage() {
                 <th>Balance</th>
                 <th>Status</th>
                 <th>Policy</th>
+                <th>Invoice</th>
               </tr>
             </thead>
             <tbody>
@@ -66,6 +77,11 @@ export default function ContractsPage() {
                   <td>{formatCurrency(row.remainingBalance)}</td>
                   <td><span className={`badge ${row.status.toLowerCase()}`}>{row.status}</span></td>
                   <td><span className={`badge ${row.policyState.toLowerCase()}`}>{row.policyState}</span></td>
+                  <td>
+                    <button type="button" className="ghost-button" onClick={() => downloadInvoice(row)}>
+                      PDF
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

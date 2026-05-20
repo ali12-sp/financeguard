@@ -7,10 +7,12 @@ import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 import { getDeviceSummary } from '../contracts/ledger.js';
 import {
   applyDeviceStateChange,
+  applyManualUnlockOverride,
   getPendingCommandsForDevice,
   issueDeviceCommand
 } from '../../services/device-control.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { createAgentSecret } from '../../services/secrets.js';
 
 const router = Router();
 
@@ -42,7 +44,7 @@ router.post('/', asyncHandler(async (req, res) => {
     serial: parsed.data.serial,
     imei: parsed.data.imei,
     uniqueId: parsed.data.uniqueId,
-    agentSecret: `FG-${Math.floor(Math.random() * 9000) + 1000}`,
+    agentSecret: createAgentSecret(),
     enrollmentStatus: 'PENDING' as const,
     enrollmentMode: parsed.data.enrollmentMode,
     assignedCustomerId: parsed.data.assignedCustomerId,
@@ -89,6 +91,38 @@ router.post('/:id/state', async (req, res) => {
     res.status(404).json({ message: error instanceof Error ? error.message : 'Device not found' });
   }
 });
+
+router.post('/:id/manual-unlock', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    reason: z.string().min(3),
+    hours: z.number().int().min(1).max(168).default(24)
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
+  if (!device) {
+    return res.status(404).json({ message: 'Device not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await applyManualUnlockOverride({
+    deviceId: device.id,
+    reason: parsed.data.reason,
+    hours: parsed.data.hours,
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.json({
+    ...getDeviceSummary(result.device),
+    manualUnlockUntil: result.manualUnlockUntil,
+    latestCommand: result.command
+  });
+}));
 
 router.post('/:id/commands', async (req, res) => {
   const schema = z.object({

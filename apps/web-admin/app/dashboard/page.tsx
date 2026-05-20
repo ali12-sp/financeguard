@@ -52,6 +52,7 @@ interface DashboardSummary {
   payments: number;
   devices: number;
   enrolledDevices: number;
+  staleDevices: number;
   lateAccounts: number;
   restrictedDevices: number;
   outstandingBalance: number;
@@ -71,6 +72,7 @@ interface PlatformWorkspaceRow {
   customerCount: number;
   deviceCount: number;
   enrolledDeviceCount: number;
+  staleDeviceCount: number;
   contractCount: number;
   lateAccountCount: number;
   restrictedDeviceCount: number;
@@ -124,6 +126,7 @@ interface PlatformSummary {
   customers: number;
   devices: number;
   enrolledDevices: number;
+  staleDevices: number;
   contracts: number;
   activeContracts: number;
   lateAccounts: number;
@@ -196,10 +199,10 @@ export default function DashboardPage() {
           <StatCard title="Workspaces" value={String(platformSummary.workspaces)} note={`${platformSummary.activeWorkspaces} active and ${platformSummary.suspendedWorkspaces} suspended`} />
           <StatCard title="Customers" value={String(platformSummary.customers)} note="Combined financed customers across all shops" />
           <StatCard title="Devices" value={String(platformSummary.devices)} note={`${platformSummary.enrolledDevices} enrolled phones across the platform`} />
+          <StatCard title="Stale Devices" value={String(platformSummary.staleDevices)} note="No sync in the last 24 hours or never synced" />
           <StatCard title="Contracts" value={String(platformSummary.contracts)} note={`${platformSummary.activeContracts} active installment contracts`} />
           <StatCard title="Payments" value={String(platformSummary.payments)} note="Recorded payment events across all workspaces" />
           <StatCard title="Outstanding" value={formatCurrency(platformSummary.outstandingBalance)} note={`${platformSummary.lateAccounts} late accounts needing attention`} />
-          <StatCard title="Registration Alerts" value={String(platformSummary.registrationAlerts)} note="Internal alerts captured when devices register" />
           <StatCard title="Pending Commands" value={String(platformSummary.pendingCommands)} note="Cross-workspace lock, unlock, sync, or reminder tasks still pending" />
           <StatCard title="Restricted Devices" value={String(platformSummary.restrictedDevices)} note="Phones currently blocked across all workspaces" />
         </div>
@@ -316,6 +319,7 @@ export default function DashboardPage() {
                     <th>Customers</th>
                     <th>Devices</th>
                     <th>Late / Restricted</th>
+                    <th>Stale</th>
                     <th>Outstanding</th>
                   </tr>
                 </thead>
@@ -334,6 +338,7 @@ export default function DashboardPage() {
                       <td>{row.customerCount}</td>
                       <td>{row.deviceCount}</td>
                       <td>{row.lateAccountCount} / {row.restrictedDeviceCount}</td>
+                      <td>{row.staleDeviceCount}</td>
                       <td>{formatCurrency(row.outstandingBalance)}</td>
                     </tr>
                   ))}
@@ -365,9 +370,9 @@ export default function DashboardPage() {
         <StatCard title="Contracts" value={String(tenantSummary?.contracts ?? 0)} note={`${tenantSummary?.activeContracts ?? 0} currently active`} />
         <StatCard title="Payments" value={String(tenantSummary?.payments ?? 0)} note="Posted installment receipts" />
         <StatCard title="Devices" value={String(tenantSummary?.devices ?? 0)} note={`${tenantSummary?.enrolledDevices ?? 0} enrolled in managed mode`} />
+        <StatCard title="Stale Devices" value={String(tenantSummary?.staleDevices ?? 0)} note="No sync in the last 24 hours or never synced" />
         <StatCard title="Outstanding" value={formatCurrency(tenantSummary?.outstandingBalance ?? 0)} note={`${tenantSummary?.lateAccounts ?? 0} accounts in grace or restricted`} />
         <StatCard title="Pending Commands" value={String(tenantSummary?.pendingCommands ?? 0)} note="Lock, unlock, sync, and reminder tasks waiting on devices" />
-        <StatCard title="Queued Notifications" value={String(tenantSummary?.queuedNotifications ?? 0)} note="Messages waiting for provider delivery" />
         <StatCard title="Restricted Devices" value={String(tenantSummary?.restrictedDevices ?? 0)} note="Devices currently blocked for missed payments" />
       </div>
 

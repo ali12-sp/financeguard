@@ -99,6 +99,19 @@ export function syncContractState(contract: ContractRecord, today = new Date()) 
       return { contract, device, policyState, status: nextStatus };
     }
 
+    const manualUnlockActive =
+      device.manualUnlockUntil && Date.parse(device.manualUnlockUntil) > today.getTime();
+    if (manualUnlockActive) {
+      device.state = policyState === 'RELEASED' ? 'RELEASED' : 'ACTIVE';
+      device.restrictionReason = undefined;
+      return { contract, device, policyState, status: nextStatus };
+    }
+
+    if (device.manualUnlockUntil) {
+      device.manualUnlockUntil = undefined;
+      device.manualUnlockReason = undefined;
+    }
+
     device.state = policyState;
     if (policyState === 'RESTRICTED' && !device.restrictionReason) {
       device.restrictionReason = 'Auto: missed scheduled installments beyond grace period';
@@ -221,6 +234,8 @@ export function getDeviceSummary(device: DeviceRecord, today = new Date()) {
     : null;
   const remainingBalance = contract ? getRemainingBalance(contract) : 0;
   const policyState = contract ? evaluatePolicy(contract, today) : device.state;
+  const manualUnlockActive =
+    device.manualUnlockUntil && Date.parse(device.manualUnlockUntil) > today.getTime();
 
   return {
     ...device,
@@ -228,7 +243,8 @@ export function getDeviceSummary(device: DeviceRecord, today = new Date()) {
     customerName: customer?.fullName ?? null,
     contractId: contract?.id ?? null,
     remainingBalance,
-    policyState
+    policyState,
+    manualUnlockActive: Boolean(manualUnlockActive)
   };
 }
 

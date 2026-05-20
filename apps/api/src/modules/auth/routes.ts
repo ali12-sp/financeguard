@@ -2,10 +2,12 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { env } from '../../config/env.js';
-import { db, persistDb } from '../../db/mock-db.js';
-import { requireAuth, type AuthRequest } from '../../middleware/auth.js';
+import { addAuditLog, db, persistDb } from '../../db/mock-db.js';
+import { requireAuth, requireStaffAccess, type AuthRequest } from '../../middleware/auth.js';
 import { hashPassword, verifyPassword } from '../../services/passwords.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { createTemporaryPortalPassword } from '../../services/secrets.js';
+import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 
 const router = Router();
 
@@ -64,6 +66,7 @@ router.post('/login', (req, res) => {
       tenantName: tenant.name,
       tenantSlug: tenant.slug,
       isPlatformOwner: user.isPlatformOwner === true,
+      mustChangePassword: user.mustChangePassword === true,
       workspaceSettings: tenant.settings
     },
     env.jwtSecret,
@@ -82,6 +85,7 @@ router.post('/login', (req, res) => {
       tenantName: tenant.name,
       tenantSlug: tenant.slug,
       isPlatformOwner: user.isPlatformOwner === true,
+      mustChangePassword: user.mustChangePassword === true,
       workspaceSettings: tenant.settings,
       customerId: user.customerId
     }
@@ -107,11 +111,82 @@ router.get('/me', requireAuth, (req, res) => {
       tenantName: authUser?.tenantName,
       tenantSlug: authUser?.tenantSlug,
       isPlatformOwner: user.isPlatformOwner === true,
+      mustChangePassword: user.mustChangePassword === true,
       workspaceSettings: db.tenants.find((item) => item.id === user.tenantId)?.settings,
       customerId: user.customerId
     }
   });
 });
+
+router.get('/users', requireAuth, requireStaffAccess, (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const actor = (req as AuthRequest).user;
+  const rows = scopeToTenant(db.users, tenantId)
+    .filter((user) => actor?.role === 'admin' || user.role === 'customer')
+    .map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      customerId: user.customerId,
+      mustChangePassword: user.mustChangePassword === true
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  return res.json(rows);
+});
+
+router.post('/users/:id/reset-password', requireAuth, requireStaffAccess, asyncHandler(async (req, res) => {
+  const schema = z.object({
+    temporaryPassword: z.string().min(6).max(128).optional()
+  });
+
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const actor = (req as AuthRequest).user;
+  const user = scopeToTenant(db.users, tenantId).find((item) => item.id === req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  if (actor?.role === 'staff' && user.role !== 'customer') {
+    return res.status(403).json({ message: 'Staff can reset customer passwords only' });
+  }
+
+  const temporaryPassword = parsed.data.temporaryPassword ?? createTemporaryPortalPassword();
+  user.password = hashPassword(temporaryPassword);
+  user.mustChangePassword = true;
+  await persistDb();
+
+  addAuditLog({
+    tenantId,
+    actorUserId: actor?.id ?? 'system',
+    actorName: actor?.email ?? 'System',
+    action: 'PASSWORD_RESET',
+    entityType: 'USER',
+    entityId: user.id,
+    reason: 'Temporary password issued from the admin security screen',
+    details: `${user.name} (${user.role}) must change password on next login.`
+  });
+
+  return res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      customerId: user.customerId,
+      mustChangePassword: user.mustChangePassword === true
+    },
+    temporaryPassword
+  });
+}));
 
 router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   const schema = z.object({
@@ -135,6 +210,7 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   }
 
   user.password = hashPassword(parsed.data.newPassword);
+  user.mustChangePassword = false;
   await persistDb();
 
   return res.json({ ok: true });

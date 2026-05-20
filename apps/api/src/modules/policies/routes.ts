@@ -11,6 +11,7 @@ import {
   getUpcomingInstallments,
   runInstallmentScheduler
 } from '../../services/scheduler.js';
+import { isDeviceSyncStale } from '../../services/device-health.js';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.get('/summary', (_req, res) => {
   const tenantId = getTenantIdFromAuth(_req as AuthRequest);
   const contracts = scopeToTenant(db.contracts, tenantId).map((contract) => getContractSummary(contract));
   const devices = scopeToTenant(db.devices, tenantId).map((device) => getDeviceSummary(device));
+  const tenantDevices = scopeToTenant(db.devices, tenantId);
 
   res.json({
     customers: scopeToTenant(db.customers, tenantId).length,
@@ -27,8 +29,9 @@ router.get('/summary', (_req, res) => {
       (contract) => contract.status !== 'COMPLETED' && contract.status !== 'CANCELLED'
     ).length,
     payments: scopeToTenant(db.payments, tenantId).length,
-    devices: scopeToTenant(db.devices, tenantId).length,
+    devices: tenantDevices.length,
     enrolledDevices: devices.filter((device) => device.enrollmentStatus === 'ENROLLED').length,
+    staleDevices: tenantDevices.filter((device) => isDeviceSyncStale(device)).length,
     lateAccounts: contracts.filter(
       (contract) => contract.policyState === 'GRACE' || contract.policyState === 'RESTRICTED'
     ).length,
@@ -85,10 +88,13 @@ router.get('/late-customers', (_req, res) => {
     .filter((item) => item.policyState === 'GRACE' || item.policyState === 'RESTRICTED')
     .map((item) => ({
       contractId: item.id,
+      deviceId: item.deviceId,
       customerName: item.customerName,
       phone: item.customerPhone,
       deviceModel: item.deviceModel,
       state: item.policyState,
+      manualUnlockUntil: scopeToTenant(db.devices, tenantId).find((device) => device.id === item.deviceId)?.manualUnlockUntil,
+      manualUnlockReason: scopeToTenant(db.devices, tenantId).find((device) => device.id === item.deviceId)?.manualUnlockReason,
       dueDayOfMonth: item.dueDayOfMonth,
       monthlyInstallment: item.monthlyInstallment,
       totalPaid: item.totalPaid,

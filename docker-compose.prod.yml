@@ -34,7 +34,7 @@ services:
       SCHEDULER_INTERVAL_MS: ${SCHEDULER_INTERVAL_MS:-3600000}
       BACKUP_INTERVAL_MS: ${BACKUP_INTERVAL_MS:-21600000}
       NOTIFICATION_DISPATCH_INTERVAL_MS: ${NOTIFICATION_DISPATCH_INTERVAL_MS:-30000}
-      RUN_BACKGROUND_JOBS: false
+      RUN_BACKGROUND_JOBS: true
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-1mb}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
@@ -49,9 +49,9 @@ services:
       WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
       WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
       WHATSAPP_SENDER_ID: ${WHATSAPP_SENDER_ID:-FinanceGuard}
-      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
-      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:-}
-      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:-}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:?Set FCM_PROJECT_ID in .env.production}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:?Set FCM_CLIENT_EMAIL in .env.production}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:?Set FCM_PRIVATE_KEY in .env.production}
     volumes:
       - api-data:/app/data
     healthcheck:
@@ -74,47 +74,6 @@ services:
       NODE_ENV: production
       PORT: 3000
 
-  worker:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    command: ["node", "dist/worker.js"]
-    environment:
-      NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.production}
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
-      PERSISTENCE_ENGINE: postgres
-      DATABASE_URL: postgresql://${POSTGRES_USER:-financeguard}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-financeguard}
-      DATABASE_SSL_MODE: disable
-      SCHEDULER_INTERVAL_MS: ${SCHEDULER_INTERVAL_MS:-3600000}
-      BACKUP_INTERVAL_MS: ${BACKUP_INTERVAL_MS:-21600000}
-      NOTIFICATION_DISPATCH_INTERVAL_MS: ${NOTIFICATION_DISPATCH_INTERVAL_MS:-30000}
-      RUN_BACKGROUND_JOBS: true
-      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-1mb}
-      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
-      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-900000}
-      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-15}
-      SMS_WEBHOOK_URL: ${SMS_WEBHOOK_URL:-}
-      SMS_API_KEY: ${SMS_API_KEY:-}
-      SMS_SENDER_ID: ${SMS_SENDER_ID:-FinanceGuard}
-      EMAIL_WEBHOOK_URL: ${EMAIL_WEBHOOK_URL:-}
-      EMAIL_API_KEY: ${EMAIL_API_KEY:-}
-      EMAIL_SENDER: ${EMAIL_SENDER:-alerts@financeguard.local}
-      WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
-      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
-      WHATSAPP_SENDER_ID: ${WHATSAPP_SENDER_ID:-FinanceGuard}
-      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
-      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:-}
-      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:-}
-    volumes:
-      - api-data:/app/data
-
   proxy:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -122,8 +81,6 @@ services:
       api:
         condition: service_healthy
       web:
-        condition: service_started
-      worker:
         condition: service_started
     ports:
       - "${HTTP_PORT:-80}:80"

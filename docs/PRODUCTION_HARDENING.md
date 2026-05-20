@@ -4,12 +4,18 @@ This project now supports a stronger production deployment model than the origin
 
 ## What is improved
 
-- API and worker processes can be split.
-- Notification delivery is queued and processed by the worker.
+- Scheduler, notification queue, and backups run inside the production API process to avoid snapshot persistence races.
+- API and worker processes should be split only after the database layer is normalized.
+- Notification delivery is queued and processed by background jobs.
+- Temporary admin/customer credentials require a first-login password change.
+- Device enrollment secrets are high-entropy crypto tokens.
+- Payments support method, reference number, and receipt URL tracking.
+- Dashboard summaries include stale-device counts for phones that have not synced in 24 hours.
 - Metrics endpoints are available for platform-owner monitoring:
   - `/api/metrics`
   - `/api/metrics/prometheus`
 - Android release signing can be configured with `keystore.properties`.
+- Android release builds disable cleartext traffic and app backup.
 - Workspace settings now support:
   - agent APK URL
   - agent APK checksum
@@ -23,8 +29,7 @@ npm --workspace apps/api run restore -- ./apps/api/data/backups/financeguard-<ti
 ## Recommended production topology
 
 - `web` service for Next.js admin
-- `api` service for request handling only
-- `worker` service for scheduler, notification queue, and backup jobs
+- `api` service for request handling, scheduler, notification queue, and backup jobs
 - `postgres` for persistence
 - reverse proxy / HTTPS terminator
 
@@ -67,4 +72,4 @@ Run a restore drill before live rollout:
 
 ## Remaining major architecture milestone
 
-The system still persists the application state as collection snapshots in PostgreSQL/SQLite. That is acceptable for early production and pilot use, but the next major scale milestone should replace snapshot persistence with a normalized relational schema and migration-driven writes.
+The system still persists the application state as collection snapshots in PostgreSQL/SQLite. The production Compose setup keeps writes in one API process to reduce lost-update risk, but the next major scale milestone should replace snapshot persistence with a normalized relational schema, row-level writes, and migration-driven schema changes before scaling horizontally.

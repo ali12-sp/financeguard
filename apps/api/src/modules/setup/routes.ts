@@ -83,6 +83,7 @@ router.post('/initialize', asyncHandler(async (req, res) => {
       tenantName: parsed.data.organizationName.trim(),
       tenantSlug,
       isPlatformOwner: true,
+      mustChangePassword: false,
       workspaceSettings: buildDefaultWorkspaceSettings({
         supportEmail: parsed.data.adminEmail.trim().toLowerCase(),
         supportPhone: parsed.data.adminPhone?.trim()
@@ -104,6 +105,7 @@ router.post('/initialize', asyncHandler(async (req, res) => {
       tenantName: parsed.data.organizationName.trim(),
       tenantSlug,
       isPlatformOwner: true,
+      mustChangePassword: false,
       workspaceSettings: buildDefaultWorkspaceSettings({
         supportEmail: parsed.data.adminEmail.trim().toLowerCase(),
         supportPhone: parsed.data.adminPhone?.trim()

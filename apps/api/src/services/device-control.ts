@@ -164,6 +164,8 @@ export async function applyDeviceStateChange(options: {
   const contract = updateLinkedContract(device.id, options.nextState);
 
   device.state = options.nextState;
+  device.manualUnlockUntil = undefined;
+  device.manualUnlockReason = undefined;
   if (options.source === 'ADMIN') {
     device.adminLocked = options.nextState === 'RESTRICTED';
   } else if (options.nextState !== 'RESTRICTED') {
@@ -199,6 +201,53 @@ export async function applyDeviceStateChange(options: {
       : null;
 
   return { device, contract, command };
+}
+
+export async function applyManualUnlockOverride(options: {
+  deviceId: string;
+  reason: string;
+  actor?: ActorInfo;
+  hours?: number;
+}) {
+  const device = db.devices.find((item) => item.id === options.deviceId);
+  if (!device) {
+    throw new Error('Device not found');
+  }
+
+  const actor = getActor(options.actor);
+  const previousState = device.state;
+  const contract = db.contracts.find((item) => item.deviceId === device.id) ?? null;
+  const hours = options.hours ?? 24;
+  const manualUnlockUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+  device.state = 'ACTIVE';
+  device.adminLocked = false;
+  device.restrictionReason = undefined;
+  device.manualUnlockUntil = manualUnlockUntil;
+  device.manualUnlockReason = options.reason;
+
+  addAuditLog({
+    tenantId: device.tenantId,
+    actorUserId: actor.id,
+    actorName: actor.name,
+    action: 'MANUAL_OVERRIDE',
+    entityType: 'DEVICE',
+    entityId: device.id,
+    reason: options.reason,
+    details: `Manual unlock override changed device state from ${previousState} to ACTIVE until ${manualUnlockUntil}.`
+  });
+
+  await persistDb();
+
+  const command = await issueDeviceCommand({
+    deviceId: device.id,
+    contractId: contract?.id,
+    type: 'UNLOCK',
+    reason: `Manual unlock override until ${manualUnlockUntil}: ${options.reason}`,
+    source: 'ADMIN'
+  });
+
+  return { device, contract, command, manualUnlockUntil };
 }
 
 export function getPendingCommandsForDevice(deviceId: string) {

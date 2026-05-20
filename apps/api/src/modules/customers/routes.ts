@@ -5,14 +5,10 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { hashPassword } from '../../services/passwords.js';
 import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { createAgentSecret, createTemporaryPortalPassword } from '../../services/secrets.js';
 import { getCustomerDetail, getCustomerSummary } from '../contracts/ledger.js';
 
 const router = Router();
-
-function defaultPortalPin(cnic: string) {
-  const digits = cnic.replace(/\D/g, '');
-  return digits.slice(-4) || '1234';
-}
 
 function ensureUniqueCustomerIdentity(tenantId: string, phone: string, cnic: string) {
   const normalizedPhone = phone.trim();
@@ -29,19 +25,27 @@ function ensureUniqueCustomerIdentity(tenantId: string, phone: string, cnic: str
   return null;
 }
 
-function createPortalUser(tenantId: string, customerId: string, fullName: string, phone: string, cnic: string, portalPin?: string) {
-  const nextPassword = portalPin ?? defaultPortalPin(cnic);
+function createPortalUser(
+  tenantId: string,
+  customerId: string,
+  fullName: string,
+  phone: string,
+  portalPin?: string
+) {
+  const nextPassword = portalPin ?? createTemporaryPortalPassword();
   const existing = db.users.find((item) => item.tenantId === tenantId && (item.customerId === customerId || item.phone === phone));
   if (existing) {
     existing.name = fullName;
     existing.phone = phone;
     existing.role = 'customer';
     existing.customerId = customerId;
-    existing.password = portalPin ? hashPassword(portalPin) : existing.password;
+    if (portalPin) {
+      existing.password = hashPassword(portalPin);
+    }
     if (!existing.email) {
       existing.email = `customer-${customerId}@financeguard.local`;
     }
-    return { user: existing, plainPassword: nextPassword };
+    return { user: existing, plainPassword: portalPin };
   }
 
   const user = {
@@ -52,6 +56,7 @@ function createPortalUser(tenantId: string, customerId: string, fullName: string
     phone,
     password: hashPassword(nextPassword),
     role: 'customer' as const,
+    mustChangePassword: true,
     customerId
   };
   db.users.push(user);
@@ -146,7 +151,7 @@ router.post('/onboard', asyncHandler(async (req, res) => {
     serial: parsed.data.device.serial,
     imei: parsed.data.device.imei,
     uniqueId: parsed.data.device.uniqueId,
-    agentSecret: `FG-${Math.floor(Math.random() * 9000) + 1000}`,
+    agentSecret: createAgentSecret(),
     enrollmentStatus: 'PENDING' as const,
     enrollmentMode: parsed.data.device.enrollmentMode ?? tenantSettings?.defaultEnrollmentMode ?? 'QR',
     state: 'ACTIVE' as const,
@@ -180,7 +185,6 @@ router.post('/onboard', asyncHandler(async (req, res) => {
     customer.id,
     customer.fullName,
     customer.phone,
-    customer.cnic,
     portalPin
   );
   db.devices.push(device);
@@ -257,7 +261,6 @@ router.post('/', asyncHandler(async (req, res) => {
     record.id,
     record.fullName,
     record.phone,
-    record.cnic,
     portalPin
   );
   await persistDb();

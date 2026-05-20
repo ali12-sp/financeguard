@@ -4,6 +4,7 @@ import { addAuditLog, buildInstallmentSchedule, db, nextNumericId, persistDb } f
 import type { AuthRequest } from '../../middleware/auth.js';
 import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { createContractInvoicePdf } from '../../services/pdf-documents.js';
 import { getContractDetail, getContractSummary, syncContractState } from './ledger.js';
 
 const router = Router();
@@ -19,6 +20,17 @@ router.get('/:id', (req, res) => {
   if (!contract) return res.status(404).json({ message: 'Contract not found' });
 
   res.json(getContractDetail(contract));
+});
+
+router.get('/:id/invoice.pdf', (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const contract = scopeToTenant(db.contracts, tenantId).find((item) => item.id === req.params.id);
+  if (!contract) return res.status(404).json({ message: 'Contract not found' });
+
+  const pdf = createContractInvoicePdf(contract);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="invoice-${contract.id}.pdf"`);
+  res.send(pdf);
 });
 
 router.post('/', asyncHandler(async (req, res) => {

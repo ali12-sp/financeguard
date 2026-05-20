@@ -51,12 +51,44 @@ if (env.nodeEnv === 'production') {
     issues.push('JWT_SECRET must be changed for production.');
   }
 
+  if (env.jwtSecret.includes('replace-with')) {
+    issues.push('JWT_SECRET must not use the example placeholder value.');
+  }
+
+  if (env.jwtSecret.length < 32) {
+    issues.push('JWT_SECRET must be at least 32 characters for production.');
+  }
+
+  if (!env.publicApiUrl.startsWith('https://')) {
+    issues.push('PUBLIC_API_URL must use HTTPS for production.');
+  }
+
   if (env.corsAllowedOrigins.includes('http://localhost:3000')) {
     issues.push('CORS_ALLOWED_ORIGINS must be set explicitly for production.');
   }
 
+  if (env.persistenceEngine !== 'postgres') {
+    issues.push('PERSISTENCE_ENGINE=postgres is required for production.');
+  }
+
   if (env.persistenceEngine === 'postgres' && !env.databaseUrl) {
     issues.push('DATABASE_URL must be set when PERSISTENCE_ENGINE=postgres.');
+  }
+
+  if (env.databaseUrl.includes('replace-with')) {
+    issues.push('DATABASE_URL must not contain example placeholder credentials.');
+  }
+
+  if (!env.fcmProjectId || !env.fcmClientEmail || !env.fcmPrivateKey) {
+    issues.push('FCM_PROJECT_ID, FCM_CLIENT_EMAIL, and FCM_PRIVATE_KEY are required for production device command delivery.');
+  }
+
+  if (
+    env.fcmProjectId.includes('your-firebase') ||
+    env.fcmClientEmail.includes('example.') ||
+    env.fcmPrivateKey.includes('replace-with')
+  ) {
+    issues.push('Firebase service account values must not use example placeholders.');
   }
 
   if (issues.length > 0) {

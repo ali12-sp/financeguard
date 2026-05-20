@@ -2,16 +2,15 @@
 
 ## Minimum production setup
 
-1. Use Node.js 20.9 or newer. For production, prefer Node.js 22 LTS.
+1. Use Node.js 22.5 or newer. For production, prefer the current Node.js 22 LTS line.
 2. Set `NODE_ENV=production`.
 3. Change `JWT_SECRET` to a long random value.
 4. Set `PUBLIC_API_URL` to your real HTTPS API origin.
 5. Set `CORS_ALLOWED_ORIGINS` to your real admin/customer web origins.
-6. Choose one persistence engine:
-   - `PERSISTENCE_ENGINE=sqlite` for a single-node pilot
-   - `PERSISTENCE_ENGINE=postgres` with `DATABASE_URL` for business rollout
+6. Use `PERSISTENCE_ENGINE=postgres` with `DATABASE_URL` for business rollout.
 7. Keep automated backups enabled with `BACKUP_INTERVAL_MS`.
-8. Test Device Owner enrollment on spare phones before any customer rollout.
+8. Configure real Firebase Cloud Messaging credentials.
+9. Test Device Owner enrollment on spare phones before any customer rollout.
 
 ## Recommended API environment variables
 
@@ -40,9 +39,9 @@ EMAIL_SENDER=alerts@your-domain.com
 WHATSAPP_WEBHOOK_URL=
 WHATSAPP_API_KEY=
 WHATSAPP_SENDER_ID=FinanceGuard
-FCM_PROJECT_ID=
-FCM_CLIENT_EMAIL=
-FCM_PRIVATE_KEY=
+FCM_PROJECT_ID=your-firebase-project-id
+FCM_CLIENT_EMAIL=firebase-adminsdk@example.iam.gserviceaccount.com
+FCM_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nreplace-with-firebase-private-key\n-----END PRIVATE KEY-----\n"
 ```
 
 ## First launch flow
@@ -71,7 +70,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 Services included:
 
 - `db`: PostgreSQL 16
-- `api`: FinanceGuard API
+- `api`: FinanceGuard API, scheduler, notification queue, and backup jobs
 - `web`: Next.js admin/customer web server
 - `proxy`: Nginx reverse proxy serving `/` and `/api`
 
@@ -85,21 +84,23 @@ Important:
 
 1. Confirm `/api/health` is healthy.
 2. Confirm `/api/health/ready` returns `200`.
-3. Create a manual backup with `npm run backup:api`.
-4. If using SQLite, verify the file exists at `apps/api/data/financeguard.sqlite`.
-5. If using PostgreSQL, verify `/api/health` reports `"engine": "postgres"`.
-6. Test platform-owner login.
-7. Create a second workspace from the `Workspaces` page and verify that workspace login works.
-8. Run one `Global Search` query against a known device IMEI or customer phone number.
-9. Send one test registration alert from the workspace editor and verify email/SMS/WhatsApp webhook delivery.
-10. Test customer portal login.
-11. Test one lock flow and one unlock flow on a spare managed device.
-12. Test payment posting and automatic unlock.
-13. Verify backup files are created under `apps/api/data/backups`.
+3. Run `npm run verify:release` in CI or on a machine that allows Next.js build workers.
+4. Run `npm run audit:prod` and review any remaining advisories before launch.
+5. Create a manual backup with `npm run backup:api`.
+6. Verify `/api/health` reports `"engine": "postgres"`.
+7. Test platform-owner login.
+8. Create a second workspace from the `Workspaces` page and verify that workspace login works.
+9. Run one `Global Search` query against a known device IMEI or customer phone number.
+10. Send one test registration alert from the workspace editor and verify email/SMS/WhatsApp webhook delivery.
+11. Test customer portal login and first-login password change.
+12. Test one lock flow, unlock flow, and sync command on a spare managed device.
+13. Test payment posting, receipt/reference tracking, and automatic unlock.
+14. Verify backup files are created under `apps/api/data/backups`.
 
 ## Rollout guidance
 
-- SQLite is acceptable for a controlled pilot or internal staging.
-- PostgreSQL is the recommended production engine for onboarding dozens of workspaces.
+- SQLite is acceptable only for local development or internal staging.
+- PostgreSQL is required by the production environment validation.
+- Keep the bundled single API process while this project uses snapshot persistence. Split a separate worker only after the persistence layer is migrated to normalized relational tables.
 - The platform owner console is now designed for a central operations team that manages many client workspaces from one deployment.
 - Expand only after a real pilot confirms lock, unlock, backup, payment, enrollment, search, and alert flows are stable.
