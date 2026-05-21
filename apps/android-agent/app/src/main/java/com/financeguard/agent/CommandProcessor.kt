@@ -20,6 +20,7 @@ class CommandProcessor(
                 deviceId = device.optString("id", prefs.snapshot().deviceId),
                 lastSyncAt = device.optString("lastSyncAt", prefs.snapshot().lastSyncAt)
             )
+            applyServerState(device)
         }
 
         processPendingCommands(payload.pendingCommands)
@@ -108,6 +109,61 @@ class CommandProcessor(
                     reason = "Server requested sync",
                     lastCommandId = commandId
                 )
+                policyController.enforceSavedState()
+            }
+
+            "RELEASE_CONTROL" -> {
+                prefs.updateState(
+                    state = DeviceState.RELEASED,
+                    reason = reason.ifBlank { "Managed control released by admin" },
+                    lockMessage = "",
+                    lastCommandId = commandId
+                )
+                policyController.releaseManagedControl()
+            }
+        }
+    }
+
+    private fun applyServerState(device: JSONObject) {
+        val serverState = stateRepository.fromServer(device.optString("state"))
+        val snapshot = prefs.snapshot()
+        val reason = device.optString("restrictionReason", snapshot.lastReason)
+        val lockMessage = reason.ifBlank {
+            snapshot.lockMessage.ifBlank {
+                "Payment overdue. Contact FinanceGuard to unlock this device."
+            }
+        }
+
+        when (serverState) {
+            DeviceState.RESTRICTED -> {
+                prefs.updateState(
+                    state = DeviceState.RESTRICTED,
+                    reason = reason,
+                    lockMessage = lockMessage
+                )
+                policyController.applyRestrictedMode(lockMessage)
+            }
+
+            DeviceState.ACTIVE,
+            DeviceState.RELEASED -> {
+                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED
+                prefs.updateState(
+                    state = serverState,
+                    reason = reason,
+                    lockMessage = ""
+                )
+                policyController.applyUnlockedMode(returnHome = wasRestricted)
+            }
+
+            DeviceState.REMINDER,
+            DeviceState.GRACE -> {
+                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED
+                prefs.updateState(
+                    state = serverState,
+                    reason = reason,
+                    lockMessage = ""
+                )
+                policyController.applyUnlockedMode(returnHome = wasRestricted)
             }
         }
     }

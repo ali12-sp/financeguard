@@ -99,6 +99,16 @@ export function syncContractState(contract: ContractRecord, today = new Date()) 
       return { contract, device, policyState, status: nextStatus };
     }
 
+    if (device.adminUnlocked && policyState !== 'ACTIVE' && policyState !== 'RELEASED') {
+      device.state = 'ACTIVE';
+      device.restrictionReason = undefined;
+      return { contract, device, policyState, status: nextStatus };
+    }
+
+    if (device.adminUnlocked && (policyState === 'ACTIVE' || policyState === 'RELEASED')) {
+      device.adminUnlocked = false;
+    }
+
     const manualUnlockActive =
       device.manualUnlockUntil && Date.parse(device.manualUnlockUntil) > today.getTime();
     if (manualUnlockActive) {
@@ -233,9 +243,13 @@ export function getDeviceSummary(device: DeviceRecord, today = new Date()) {
     ? scopeToTenant(db.customers, device.tenantId).find((item) => item.id === contract.customerId) ?? null
     : null;
   const remainingBalance = contract ? getRemainingBalance(contract) : 0;
-  const policyState = contract ? evaluatePolicy(contract, today) : device.state;
+  const scheduledPolicyState = contract ? evaluatePolicy(contract, today) : device.state;
   const manualUnlockActive =
     device.manualUnlockUntil && Date.parse(device.manualUnlockUntil) > today.getTime();
+  const policyState =
+    device.adminLocked || device.adminUnlocked || manualUnlockActive
+      ? device.state
+      : scheduledPolicyState;
 
   return {
     ...device,
@@ -244,6 +258,7 @@ export function getDeviceSummary(device: DeviceRecord, today = new Date()) {
     contractId: contract?.id ?? null,
     remainingBalance,
     policyState,
+    scheduledPolicyState,
     manualUnlockActive: Boolean(manualUnlockActive)
   };
 }

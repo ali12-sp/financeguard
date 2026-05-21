@@ -147,6 +147,17 @@ export async function runInstallmentScheduler(now = new Date(), tenantId?: strin
         continue;
       }
 
+      if (device.adminUnlocked && desiredState !== 'ACTIVE' && desiredState !== 'RELEASED') {
+        device.state = 'ACTIVE';
+        device.restrictionReason = undefined;
+        await persistDb();
+        continue;
+      }
+
+      if (device.adminUnlocked && (desiredState === 'ACTIVE' || desiredState === 'RELEASED')) {
+        device.adminUnlocked = false;
+      }
+
       const previousState = device.state;
       if (previousState === desiredState) {
         if (desiredState !== 'RESTRICTED') {

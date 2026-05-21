@@ -15,6 +15,8 @@ export type AuditAction =
   | 'DEVICE_UNLOCKED'
   | 'DEVICE_RELEASED'
   | 'MANUAL_OVERRIDE'
+  | 'RECORD_DELETED'
+  | 'DEVICE_CONTROL_RELEASE_REQUESTED'
   | 'PASSWORD_RESET'
   | 'PORTAL_PAYMENT_NOTICE'
   | 'UNLOCK_REVIEW_REQUESTED'
@@ -46,11 +48,13 @@ export interface Device {
   modelName: string;
   enrollmentStatus: EnrollmentStatus;
   state: DeviceState;
+  adminUnlocked?: boolean;
   restrictionReason?: string;
   assignedCustomerId?: string;
   lastSyncAt?: string;
   manualUnlockUntil?: string;
   manualUnlockReason?: string;
+  pendingDeletion?: boolean;
 }
 
 export interface Contract {

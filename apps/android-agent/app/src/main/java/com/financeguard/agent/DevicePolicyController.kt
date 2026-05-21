@@ -5,15 +5,24 @@ import android.app.admin.FactoryResetProtectionPolicy
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.UserManager
 import android.provider.Settings
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class DevicePolicyController(
     private val context: Context
 ) {
+    companion object {
+        const val ACTION_RESTRICTION_STATE_CHANGED = "com.financeguard.agent.RESTRICTION_STATE_CHANGED"
+    }
+
     private val dpm = context.getSystemService(DevicePolicyManager::class.java)
     private val admin = ComponentName(context, FinanceGuardDeviceAdminReceiver::class.java)
+    private val restrictionComponent = ComponentName(context, RestrictionActivity::class.java)
 
     fun isDeviceOwner(): Boolean {
         return dpm?.isDeviceOwnerApp(context.packageName) == true
@@ -57,20 +66,13 @@ class DevicePolicyController(
                 "This device is protected by FinanceGuard device controls. Contact your seller or administrator for support."
             )
         }
-        runCatching {
-            dpm?.setBackupServiceEnabled(admin, false)
-        }
-
         applyUserRestriction(UserManager.DISALLOW_FACTORY_RESET)
         applyUserRestriction(UserManager.DISALLOW_SAFE_BOOT)
         applyUserRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES)
         applyUserRestriction(UserManager.DISALLOW_USB_FILE_TRANSFER)
         applyUserRestriction(UserManager.DISALLOW_ADD_USER)
         applyUserRestriction(UserManager.DISALLOW_REMOVE_USER)
-        applyUserRestriction(UserManager.DISALLOW_APPS_CONTROL)
-        applyUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            applyUserRestriction(UserManager.DISALLOW_SYSTEM_ERROR_DIALOGS)
             applyUserRestriction(UserManager.DISALLOW_USER_SWITCH)
         }
     }
@@ -95,6 +97,14 @@ class DevicePolicyController(
         if (isDeviceOwner()) {
             enforceManagedBaseline()
             runCatching {
+                dpm?.setBackupServiceEnabled(admin, false)
+            }
+            applyUserRestriction(UserManager.DISALLOW_APPS_CONTROL)
+            applyUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                applyUserRestriction(UserManager.DISALLOW_SYSTEM_ERROR_DIALOGS)
+            }
+            runCatching {
                 dpm?.setDeviceOwnerLockScreenInfo(admin, lockMessage)
             }
             runCatching {
@@ -109,23 +119,32 @@ class DevicePolicyController(
             runCatching {
                 dpm?.setUninstallBlocked(admin, context.packageName, true)
             }
-        }
-
-        val intent = Intent(context, RestrictionActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra("lockMessage", lockMessage)
-        }
-        context.startActivity(intent)
-
-        if (isDeviceOwner()) {
             runCatching {
-                dpm?.lockNow()
+                dpm?.addPersistentPreferredActivity(
+                    admin,
+                    managedHomeIntentFilter(),
+                    restrictionComponent
+                )
             }
         }
+
+        openRestrictionScreen(lockMessage)
     }
 
     fun clearRestrictedMode() {
+        applyUnlockedMode(returnHome = true)
+    }
+
+    fun applyUnlockedMode(returnHome: Boolean = false) {
         if (isDeviceOwner()) {
+            runCatching {
+                dpm?.setBackupServiceEnabled(admin, true)
+            }
+            clearUserRestriction(UserManager.DISALLOW_APPS_CONTROL)
+            clearUserRestriction(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                clearUserRestriction(UserManager.DISALLOW_SYSTEM_ERROR_DIALOGS)
+            }
             runCatching {
                 dpm?.setDeviceOwnerLockScreenInfo(admin, null)
             }
@@ -135,17 +154,114 @@ class DevicePolicyController(
             runCatching {
                 dpm?.setUninstallBlocked(admin, context.packageName, true)
             }
+            runCatching {
+                dpm?.clearPackagePersistentPreferredActivities(admin, context.packageName)
+            }
         }
 
-        val intent = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        LocalBroadcastManager.getInstance(context).sendBroadcast(
+            Intent(ACTION_RESTRICTION_STATE_CHANGED)
+        )
+        if (returnHome) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                launchHomeScreen()
+            }, 350)
         }
-        context.startActivity(intent)
+    }
+
+    fun releaseManagedControl() {
+        if (isDeviceOwner()) {
+            applyUnlockedMode(returnHome = false)
+            clearUserRestriction(UserManager.DISALLOW_FACTORY_RESET)
+            clearUserRestriction(UserManager.DISALLOW_SAFE_BOOT)
+            clearUserRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES)
+            clearUserRestriction(UserManager.DISALLOW_USB_FILE_TRANSFER)
+            clearUserRestriction(UserManager.DISALLOW_ADD_USER)
+            clearUserRestriction(UserManager.DISALLOW_REMOVE_USER)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                clearUserRestriction(UserManager.DISALLOW_USER_SWITCH)
+            }
+            runCatching {
+                dpm?.setLockTaskPackages(admin, emptyArray<String>())
+            }
+            runCatching {
+                dpm?.setUninstallBlocked(admin, context.packageName, false)
+            }
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    dpm?.setFactoryResetProtectionPolicy(admin, null)
+                }
+            }
+            runCatching {
+                dpm?.clearDeviceOwnerApp(context.packageName)
+            }
+            runCatching {
+                dpm?.removeActiveAdmin(admin)
+            }
+        }
+
+        LocalBroadcastManager.getInstance(context).sendBroadcast(
+            Intent(ACTION_RESTRICTION_STATE_CHANGED)
+        )
+        Handler(Looper.getMainLooper()).postDelayed({
+            launchHomeScreen()
+        }, 350)
+    }
+
+    fun enforceSavedState() {
+        val snapshot = AgentPreferences.from(context).snapshot()
+        if (snapshot.currentState == DeviceState.RESTRICTED) {
+            applyRestrictedMode(
+                snapshot.lockMessage.ifBlank {
+                    "Payment overdue. Contact FinanceGuard to unlock this device."
+                }
+            )
+        }
     }
 
     private fun applyUserRestriction(restriction: String) {
         runCatching {
             dpm?.addUserRestriction(admin, restriction)
+        }
+    }
+
+    private fun clearUserRestriction(restriction: String) {
+        runCatching {
+            dpm?.clearUserRestriction(admin, restriction)
+        }
+    }
+
+    private fun openRestrictionScreen(lockMessage: String) {
+        val directIntent = Intent(context, RestrictionActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+            putExtra("lockMessage", lockMessage)
+        }
+        runCatching { context.startActivity(directIntent) }
+
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra("lockMessage", lockMessage)
+        }
+        runCatching { context.startActivity(homeIntent) }
+    }
+
+    private fun launchHomeScreen() {
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        }
+        runCatching { context.startActivity(intent) }
+    }
+
+    private fun managedHomeIntentFilter(): IntentFilter {
+        return IntentFilter(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addCategory(Intent.CATEGORY_DEFAULT)
         }
     }
 

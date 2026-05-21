@@ -1,15 +1,25 @@
 package com.financeguard.agent
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class RestrictionActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var lockMessageView: TextView
+    private val stateChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refresh()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,10 +58,36 @@ class RestrictionActivity : AppCompatActivity() {
         refresh()
     }
 
+    override fun onStart() {
+        super.onStart()
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            stateChangedReceiver,
+            IntentFilter(DevicePolicyController.ACTION_RESTRICTION_STATE_CHANGED)
+        )
+    }
+
+    override fun onStop() {
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(stateChangedReceiver)
+        super.onStop()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        refresh()
+    }
+
     override fun onResume() {
         super.onResume()
         refresh()
         runCatching { startLockTask() }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && AgentPreferences.from(this).snapshot().currentState == DeviceState.RESTRICTED) {
+            runCatching { startLockTask() }
+        }
     }
 
     override fun onBackPressed() {

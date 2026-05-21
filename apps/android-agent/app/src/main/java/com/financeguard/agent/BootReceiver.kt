@@ -11,6 +11,7 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == Intent.ACTION_LOCKED_BOOT_COMPLETED
         ) {
             SyncScheduler.schedulePeriodic(context)
+            DevicePolicyController(context).enforceSavedState()
             SyncScheduler.runImmediate(context)
         }
     }

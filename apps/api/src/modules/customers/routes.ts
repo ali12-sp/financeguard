@@ -7,6 +7,7 @@ import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 import { asyncHandler } from '../../services/async-handler.js';
 import { createAgentSecret, createTemporaryPortalPassword } from '../../services/secrets.js';
 import { getCustomerDetail, getCustomerSummary } from '../contracts/ledger.js';
+import { requestCustomerDeletion } from '../../services/record-deletion.js';
 
 const router = Router();
 
@@ -284,6 +285,23 @@ router.post('/', asyncHandler(async (req, res) => {
       password: portalUser.plainPassword
     }
   });
+}));
+
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const customer = scopeToTenant(db.customers, tenantId).find((item) => item.id === req.params.id);
+  if (!customer) {
+    return res.status(404).json({ message: 'Customer not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestCustomerDeletion({
+    customerId: customer.id,
+    reason: 'Admin deleted the customer from the dashboard.',
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.status(result.deleted ? 200 : 202).json(result);
 }));
 
 export default router;

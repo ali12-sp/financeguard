@@ -28,11 +28,13 @@ export type AuditAction =
   | 'DEVICE_UNLOCKED'
   | 'DEVICE_RELEASED'
   | 'MANUAL_OVERRIDE'
+  | 'RECORD_DELETED'
+  | 'DEVICE_CONTROL_RELEASE_REQUESTED'
   | 'PASSWORD_RESET'
   | 'PORTAL_PAYMENT_NOTICE'
   | 'UNLOCK_REVIEW_REQUESTED'
   | 'POLICY_RECOMPUTED';
-export type DeviceCommandType = 'LOCK' | 'UNLOCK' | 'REMINDER' | 'SYNC';
+export type DeviceCommandType = 'LOCK' | 'UNLOCK' | 'REMINDER' | 'SYNC' | 'RELEASE_CONTROL';
 export type DeviceCommandStatus = 'PENDING' | 'SENT' | 'ACKNOWLEDGED' | 'FAILED';
 export type ReminderStage = 'FIVE_DAYS' | 'TWO_DAYS' | 'DUE_TODAY' | 'OVERDUE_LOCK';
 export type NotificationChannel = 'FCM' | 'SMS' | 'EMAIL' | 'WHATSAPP' | 'SYSTEM';
@@ -63,6 +65,9 @@ export interface TenantRecord {
   contactPhone?: string;
   settings: WorkspaceSettings;
   createdAt: string;
+  pendingDeletion?: boolean;
+  deletionRequestedAt?: string;
+  deletionReason?: string;
 }
 
 export interface UserRecord {
@@ -86,6 +91,9 @@ export interface CustomerRecord {
   cnic: string;
   address?: string;
   notes?: string;
+  pendingDeletion?: boolean;
+  deletionRequestedAt?: string;
+  deletionReason?: string;
 }
 
 export interface GuarantorRecord {
@@ -111,6 +119,7 @@ export interface DeviceRecord {
   enrollmentMode?: EnrollmentMode;
   state: DeviceState;
   adminLocked?: boolean;
+  adminUnlocked?: boolean;
   restrictionReason?: string;
   assignedCustomerId?: string;
   uniqueId?: string;
@@ -122,6 +131,11 @@ export interface DeviceRecord {
   lastSyncAt?: string;
   manualUnlockUntil?: string;
   manualUnlockReason?: string;
+  pendingDeletion?: boolean;
+  deletionRequestedAt?: string;
+  deletionReason?: string;
+  pendingDeletionScope?: 'DEVICE' | 'CUSTOMER' | 'WORKSPACE';
+  pendingDeletionParentId?: string;
 }
 
 export interface ContractRecord {

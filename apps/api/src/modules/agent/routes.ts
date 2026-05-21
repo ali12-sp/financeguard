@@ -12,6 +12,7 @@ import {
   getPendingCommandsForDevice
 } from '../../services/device-control.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { finalizeReleaseControlAcknowledgement } from '../../services/record-deletion.js';
 
 const router = Router();
 
@@ -199,6 +200,7 @@ router.post('/commands/:commandId/ack', asyncHandler(async (req, res) => {
       success: parsed.data.success,
       note: parsed.data.note ?? undefined
     });
+    await finalizeReleaseControlAcknowledgement(command);
 
     return res.json(command);
   } catch (error) {

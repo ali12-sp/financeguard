@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import LayoutShell from '../../components/layout-shell';
-import { apiFetch, apiPost } from '../../components/api';
+import { apiDelete, apiFetch, apiPost } from '../../components/api';
 
 interface GuarantorRow {
   id: string;
@@ -89,6 +89,22 @@ export default function GuarantorsPage() {
     }
   }
 
+  async function deleteGuarantor(row: GuarantorRow) {
+    if (!window.confirm(`Delete guarantor ${row.fullName}?`)) {
+      return;
+    }
+
+    setStatus('Deleting guarantor...');
+
+    try {
+      const result = await apiDelete<{ message: string }>(`/guarantors/${row.id}`);
+      setStatus(result.message);
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to delete guarantor');
+    }
+  }
+
   return (
     <LayoutShell>
       <h1>Guarantors</h1>
@@ -129,6 +145,7 @@ export default function GuarantorsPage() {
                 <th>Phone</th>
                 <th>CNIC</th>
                 <th>Contract</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -140,6 +157,11 @@ export default function GuarantorsPage() {
                   <td>{row.phone || '-'}</td>
                   <td>{row.cnic}</td>
                   <td>{row.contractId ? `${row.contractId} (${row.contractStatus || '-'})` : '-'}</td>
+                  <td>
+                    <button type="button" className="danger-button" onClick={() => deleteGuarantor(row)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

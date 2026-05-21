@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { buildDefaultWorkspaceSettings, db, nextNumericId, persistDb } from '../../db/mock-db.js';
+import type { AuthRequest } from '../../middleware/auth.js';
 import { getContractSummary, getDeviceSummary, getPaymentSummary } from '../contracts/ledger.js';
 import { hashPassword } from '../../services/passwords.js';
 import { generateTenantSlug } from '../../services/tenancy.js';
@@ -10,6 +11,7 @@ import {
   sendDeviceRegistrationNotifications
 } from '../../services/notifications.js';
 import { isDeviceSyncStale } from '../../services/device-health.js';
+import { requestWorkspaceDeletion } from '../../services/record-deletion.js';
 
 const router = Router();
 
@@ -120,6 +122,9 @@ function getWorkspaceSummary(tenantId: string) {
     status: tenant?.status ?? 'SUSPENDED',
     contactEmail: tenant?.contactEmail,
     contactPhone: tenant?.contactPhone,
+    pendingDeletion: tenant?.pendingDeletion ?? false,
+    deletionRequestedAt: tenant?.deletionRequestedAt,
+    deletionReason: tenant?.deletionReason,
     settings: tenant?.settings ?? buildDefaultWorkspaceSettings(),
     createdAt: tenant?.createdAt ?? new Date(0).toISOString(),
     adminCount: admins.length,
@@ -568,6 +573,22 @@ router.patch('/workspaces/:id', asyncHandler(async (req, res) => {
   await persistDb();
 
   res.json(getWorkspaceSummary(tenant.id));
+}));
+
+router.delete('/workspaces/:id', asyncHandler(async (req, res) => {
+  const tenant = db.tenants.find((item) => item.id === req.params.id);
+  if (!tenant) {
+    return res.status(404).json({ message: 'Workspace not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestWorkspaceDeletion({
+    tenantId: tenant.id,
+    reason: 'Platform owner deleted the workspace from the dashboard.',
+    actor: actor ? { id: actor.id, email: actor.email } : { id: 'platform-owner', name: 'Platform owner' }
+  });
+
+  res.status(result.deleted ? 200 : 202).json(result);
 }));
 
 router.post('/workspaces/:id/test-registration-alert', asyncHandler(async (req, res) => {

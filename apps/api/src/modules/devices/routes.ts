@@ -13,6 +13,10 @@ import {
 } from '../../services/device-control.js';
 import { asyncHandler } from '../../services/async-handler.js';
 import { createAgentSecret } from '../../services/secrets.js';
+import {
+  requestDeviceControlRelease,
+  requestDeviceDeletion
+} from '../../services/record-deletion.js';
 
 const router = Router();
 
@@ -126,7 +130,7 @@ router.post('/:id/manual-unlock', asyncHandler(async (req, res) => {
 
 router.post('/:id/commands', async (req, res) => {
   const schema = z.object({
-    type: z.enum(['LOCK', 'UNLOCK', 'REMINDER', 'SYNC']),
+    type: z.enum(['LOCK', 'UNLOCK', 'REMINDER', 'SYNC', 'RELEASE_CONTROL']),
     reason: z.string().min(3),
     lockMessage: z.string().optional(),
     payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
@@ -158,6 +162,52 @@ router.post('/:id/commands', async (req, res) => {
     return res.status(404).json({ message: error instanceof Error ? error.message : 'Device not found' });
   }
 });
+
+router.post('/:id/release-control', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    reason: z.string().min(3).default('Admin released managed control from the dashboard.')
+  });
+
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
+  if (!device) {
+    return res.status(404).json({ message: 'Device not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestDeviceControlRelease({
+    deviceId: device.id,
+    reason: parsed.data.reason,
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.json({
+    ...getDeviceSummary(device),
+    latestCommand: result.command
+  });
+}));
+
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
+  if (!device) {
+    return res.status(404).json({ message: 'Device not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestDeviceDeletion({
+    deviceId: device.id,
+    reason: 'Admin deleted the device from the dashboard.',
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.status(result.deleted ? 200 : 202).json(result);
+}));
 
 router.get('/:imei/sync', asyncHandler(async (req, res) => {
   const device = db.devices.find((item) => item.imei === req.params.imei);

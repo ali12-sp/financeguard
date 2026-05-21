@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import LayoutShell from '../../components/layout-shell';
-import { apiFetch, apiPost } from '../../components/api';
+import { apiDelete, apiFetch, apiPost } from '../../components/api';
 import { formatCurrency } from '../../components/formatters';
 import { getStoredUser } from '../../components/session';
 
@@ -16,12 +16,15 @@ interface Device {
   customerName: string | null;
   state: 'ACTIVE' | 'REMINDER' | 'GRACE' | 'RESTRICTED' | 'RELEASED';
   policyState: 'ACTIVE' | 'REMINDER' | 'GRACE' | 'RESTRICTED' | 'RELEASED';
+  scheduledPolicyState?: 'ACTIVE' | 'REMINDER' | 'GRACE' | 'RESTRICTED' | 'RELEASED';
   remainingBalance: number;
   restrictionReason?: string;
   pushToken?: string;
   manualUnlockUntil?: string;
   manualUnlockReason?: string;
   manualUnlockActive?: boolean;
+  adminUnlocked?: boolean;
+  pendingDeletion?: boolean;
 }
 
 export default function DevicesPage() {
@@ -145,6 +148,40 @@ export default function DevicesPage() {
       loadDevices();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to apply manual unlock override');
+    }
+  }
+
+  async function releaseControl(row: Device) {
+    if (!window.confirm(`Release managed control from ${row.modelName} (${row.id})?`)) {
+      return;
+    }
+
+    setStatus('Queueing release-control command...');
+
+    try {
+      await apiPost(`/devices/${row.id}/release-control`, {
+        reason: 'Admin released managed control from the dashboard.'
+      });
+      setStatus(row.pushToken ? 'Release-control command sent.' : 'Release-control command queued. The phone will apply it on next sync.');
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to release device control');
+    }
+  }
+
+  async function deleteDevice(row: Device) {
+    if (!window.confirm(`Delete ${row.modelName} (${row.id})? Registered phones will be released from managed control before the record is removed.`)) {
+      return;
+    }
+
+    setStatus('Deleting device...');
+
+    try {
+      const result = await apiDelete<{ message: string; releaseQueued: boolean }>(`/devices/${row.id}`);
+      setStatus(result.message);
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to delete device');
     }
   }
 
@@ -302,12 +339,19 @@ export default function DevicesPage() {
                 </td>
                 <td>
                   <span className={`badge ${row.policyState.toLowerCase()}`}>{row.policyState}</span>
+                  {row.scheduledPolicyState && row.scheduledPolicyState !== row.policyState ? (
+                    <div className="inline-note">Schedule: {row.scheduledPolicyState}</div>
+                  ) : null}
                 </td>
-                <td>{row.pushToken ? 'Push ready' : 'Polling only'}</td>
+                <td>{row.pendingDeletion ? 'Release pending' : row.pushToken ? 'Push ready' : 'Polling only'}</td>
                 <td>{formatCurrency(row.remainingBalance)}</td>
                 <td>{row.restrictionReason || '-'}</td>
                 <td>
-                  {row.manualUnlockUntil ? (
+                  {row.pendingDeletion ? (
+                    <span className="badge pending">DELETE PENDING</span>
+                  ) : row.adminUnlocked ? (
+                    <span className="badge active">ADMIN ACTIVE</span>
+                  ) : row.manualUnlockUntil ? (
                     <div>
                       <span className={`badge ${row.manualUnlockActive ? 'active' : 'pending'}`}>
                         {row.manualUnlockActive ? 'ACTIVE' : 'EXPIRED'}
@@ -345,6 +389,21 @@ export default function DevicesPage() {
                       onClick={() => requestSync(row.id)}
                     >
                       Sync
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => releaseControl(row)}
+                    >
+                      Release Control
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => deleteDevice(row)}
+                      disabled={row.pendingDeletion}
+                    >
+                      {row.pendingDeletion ? 'Pending' : 'Delete'}
                     </button>
                     <button
                       type="button"

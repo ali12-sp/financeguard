@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import LayoutShell from '../../components/layout-shell';
-import { apiFetch, apiPost } from '../../components/api';
+import { apiDelete, apiFetch, apiPost } from '../../components/api';
 import { formatCurrency } from '../../components/formatters';
 import { getStoredUser } from '../../components/session';
 
@@ -16,6 +16,8 @@ interface Customer {
   guarantorCount: number;
   deviceCount: number;
   remainingBalance: number;
+  pendingDeletion?: boolean;
+  deletionRequestedAt?: string;
 }
 
 interface OnboardResponse {
@@ -120,6 +122,22 @@ export default function CustomersPage() {
     }
   }
 
+  async function deleteCustomer(row: Customer) {
+    if (!window.confirm(`Delete ${row.fullName}? Any registered phone will be released from managed control before the customer record is removed.`)) {
+      return;
+    }
+
+    setStatus('Deleting customer...');
+
+    try {
+      const result = await apiDelete<{ message: string; releaseQueued: boolean }>(`/customers/${row.id}`);
+      setStatus(result.message);
+      loadCustomers();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to delete customer');
+    }
+  }
+
   return (
     <LayoutShell>
       <h1>Customers</h1>
@@ -180,12 +198,16 @@ export default function CustomersPage() {
               <th>Guarantors</th>
               <th>Devices</th>
               <th>Remaining Balance</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.fullName}</td>
+                <td>
+                  {row.fullName}
+                  {row.pendingDeletion ? <div className="inline-note">Delete pending phone release</div> : null}
+                </td>
                 <td>{row.phone}</td>
                 <td>{row.cnic}</td>
                 <td>{row.address || '-'}</td>
@@ -193,6 +215,11 @@ export default function CustomersPage() {
                 <td>{row.guarantorCount}</td>
                 <td>{row.deviceCount}</td>
                 <td>{formatCurrency(row.remainingBalance)}</td>
+                <td>
+                  <button type="button" className="danger-button" onClick={() => deleteCustomer(row)} disabled={row.pendingDeletion}>
+                    {row.pendingDeletion ? 'Pending' : 'Delete'}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

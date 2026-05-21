@@ -159,6 +159,14 @@ export async function apiPatch<T>(path: string, body?: unknown, init?: RequestIn
   });
 }
 
+export async function apiDelete<T>(path: string, body?: unknown, init?: RequestInit) {
+  return apiFetch<T>(path, getStoredToken(), {
+    ...init,
+    method: 'DELETE',
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+}
+
 export async function apiDownload(path: string, filename: string) {
   const headers = new Headers();
   const token = getStoredToken();

@@ -168,8 +168,12 @@ export async function applyDeviceStateChange(options: {
   device.manualUnlockReason = undefined;
   if (options.source === 'ADMIN') {
     device.adminLocked = options.nextState === 'RESTRICTED';
+    device.adminUnlocked = options.nextState !== 'RESTRICTED';
   } else if (options.nextState !== 'RESTRICTED') {
     device.adminLocked = false;
+    device.adminUnlocked = false;
+  } else {
+    device.adminUnlocked = false;
   }
   device.restrictionReason =
     options.nextState === 'RESTRICTED' ? options.reason : undefined;
@@ -222,6 +226,7 @@ export async function applyManualUnlockOverride(options: {
 
   device.state = 'ACTIVE';
   device.adminLocked = false;
+  device.adminUnlocked = true;
   device.restrictionReason = undefined;
   device.manualUnlockUntil = manualUnlockUntil;
   device.manualUnlockReason = options.reason;

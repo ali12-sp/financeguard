@@ -157,7 +157,7 @@ class MainActivity : AppCompatActivity() {
                 }"
             )
             if (policyController.isDeviceOwner()) {
-                appendLine("Managed baseline: USB debugging, factory reset in Settings, safe boot, USB file transfer, app control, and unknown sources blocked")
+                appendLine("Managed baseline: USB debugging, factory reset in Settings, safe boot, USB file transfer, and user switching blocked")
                 appendLine("FRP policy accounts: ${prefs.frpAccountsCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.size}")
             }
             appendLine("Android version: ${Build.VERSION.RELEASE}")

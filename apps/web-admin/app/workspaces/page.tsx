@@ -3,7 +3,7 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import LayoutShell from '../../components/layout-shell';
-import { apiFetch, apiPatch, apiPost } from '../../components/api';
+import { apiDelete, apiFetch, apiPatch, apiPost } from '../../components/api';
 import { formatCurrency, formatDateTime } from '../../components/formatters';
 import StatCard from '../../components/stat-card';
 import { getStoredUser } from '../../components/session';
@@ -15,6 +15,9 @@ interface WorkspaceRow {
   status: 'ACTIVE' | 'SUSPENDED';
   contactEmail?: string;
   contactPhone?: string;
+  pendingDeletion?: boolean;
+  deletionRequestedAt?: string;
+  deletionReason?: string;
   createdAt: string;
   settings: {
     defaultDueDayOfMonth: number;
@@ -283,6 +286,22 @@ export default function WorkspacesPage() {
       await loadWorkspaces(row.id);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Unable to update workspace');
+    }
+  }
+
+  async function deleteWorkspace(row: WorkspaceRow) {
+    if (!window.confirm(`Delete workspace ${row.name}? Registered phones will be released from managed control before the workspace is removed.`)) {
+      return;
+    }
+
+    setStatus(`Deleting ${row.name}...`);
+
+    try {
+      const result = await apiDelete<{ message: string; releaseQueued: boolean }>(`/platform/workspaces/${row.id}`);
+      setStatus(result.message);
+      await loadWorkspaces(selectedWorkspaceId === row.id ? null : selectedWorkspaceId);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to delete workspace');
     }
   }
 
@@ -571,6 +590,14 @@ export default function WorkspacesPage() {
                 >
                   {selectedWorkspace.status === 'ACTIVE' ? 'Suspend Workspace' : 'Reactivate Workspace'}
                 </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => deleteWorkspace(selectedWorkspace)}
+                  disabled={selectedWorkspace.pendingDeletion}
+                >
+                  {selectedWorkspace.pendingDeletion ? 'Delete Pending' : 'Delete Workspace'}
+                </button>
               </div>
               <div className="inline-note">
                 Latest registration: {formatDateTime(selectedWorkspace.latestRegistrationAt)} | Latest alert: {formatDateTime(selectedWorkspace.latestAlertAt)} | Latest sync: {formatDateTime(selectedWorkspace.latestDeviceSyncAt)}
@@ -621,8 +648,11 @@ export default function WorkspacesPage() {
                   </td>
                   <td>
                     <span className={`badge ${row.status === 'ACTIVE' ? 'active' : 'danger'}`}>
-                      {row.status}
+                      {row.pendingDeletion ? 'DELETE PENDING' : row.status}
                     </span>
+                    {row.deletionRequestedAt ? (
+                      <div className="inline-note">{formatDateTime(row.deletionRequestedAt)}</div>
+                    ) : null}
                   </td>
                   <td>
                     <div>{row.customerCount} customers</div>
@@ -647,6 +677,9 @@ export default function WorkspacesPage() {
                         onClick={() => toggleWorkspaceStatus(row)}
                       >
                         {row.status === 'ACTIVE' ? 'Suspend' : 'Reactivate'}
+                      </button>
+                      <button type="button" className="danger-button" onClick={() => deleteWorkspace(row)} disabled={row.pendingDeletion}>
+                        {row.pendingDeletion ? 'Pending' : 'Delete'}
                       </button>
                     </div>
                   </td>

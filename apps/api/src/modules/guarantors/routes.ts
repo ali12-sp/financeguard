@@ -4,6 +4,7 @@ import { addAuditLog, db, nextNumericId, persistDb } from '../../db/mock-db.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { getTenantIdFromAuth, scopeToTenant } from '../../services/tenancy.js';
 import { asyncHandler } from '../../services/async-handler.js';
+import { requestGuarantorDeletion } from '../../services/record-deletion.js';
 
 const router = Router();
 
@@ -107,6 +108,23 @@ router.post('/', asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(guarantor);
+}));
+
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const guarantor = scopeToTenant(db.guarantors, tenantId).find((item) => item.id === req.params.id);
+  if (!guarantor) {
+    return res.status(404).json({ message: 'Guarantor not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestGuarantorDeletion({
+    guarantorId: guarantor.id,
+    reason: 'Admin deleted the guarantor from the dashboard.',
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.json(result);
 }));
 
 export default router;
