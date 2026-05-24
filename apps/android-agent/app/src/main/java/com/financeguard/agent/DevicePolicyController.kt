@@ -1,5 +1,6 @@
 package com.financeguard.agent
 
+import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.app.admin.FactoryResetProtectionPolicy
 import android.content.ComponentName
@@ -75,6 +76,7 @@ class DevicePolicyController(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             applyUserRestriction(UserManager.DISALLOW_USER_SWITCH)
         }
+        grantManagedRuntimePermissions()
     }
 
     fun stableDeviceId(): String {
@@ -210,6 +212,15 @@ class DevicePolicyController(
 
     fun enforceSavedState() {
         val snapshot = AgentPreferences.from(context).snapshot()
+        if (snapshot.lostModeEnabled) {
+            applyRestrictedMode(
+                snapshot.lostModeMessage.ifBlank {
+                    "This managed phone has been marked lost. Please contact the seller or office."
+                }
+            )
+            return
+        }
+
         if (snapshot.currentState == DeviceState.RESTRICTED) {
             applyRestrictedMode(
                 snapshot.lockMessage.ifBlank {
@@ -228,6 +239,35 @@ class DevicePolicyController(
     private fun clearUserRestriction(restriction: String) {
         runCatching {
             dpm?.clearUserRestriction(admin, restriction)
+        }
+    }
+
+    private fun grantManagedRuntimePermissions() {
+        if (!isDeviceOwner() || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return
+        }
+
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        permissions.forEach { permission ->
+            runCatching {
+                dpm?.setPermissionGrantState(
+                    admin,
+                    context.packageName,
+                    permission,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+            }
         }
     }
 

@@ -22,6 +22,15 @@ data class AgentSnapshot(
     val lastSyncAt: String,
     val lastCommandId: String,
     val lastReminder: String,
+    val trackingEnabled: Boolean,
+    val lostModeEnabled: Boolean,
+    val lostModeMessage: String,
+    val lastLocationSummary: String,
+    val imeiDetected: String,
+    val serialDetected: String,
+    val identifierStatus: String,
+    val batterySummary: String,
+    val networkStatus: String,
     val appVersion: String
 )
 
@@ -46,6 +55,15 @@ class AgentPreferences private constructor(
         private const val KEY_LAST_SYNC_AT = "last_sync_at"
         private const val KEY_LAST_COMMAND_ID = "last_command_id"
         private const val KEY_LAST_REMINDER = "last_reminder"
+        private const val KEY_TRACKING_ENABLED = "tracking_enabled"
+        private const val KEY_LOST_MODE_ENABLED = "lost_mode_enabled"
+        private const val KEY_LOST_MODE_MESSAGE = "lost_mode_message"
+        private const val KEY_LAST_LOCATION_SUMMARY = "last_location_summary"
+        private const val KEY_IMEI_DETECTED = "imei_detected"
+        private const val KEY_SERIAL_DETECTED = "serial_detected"
+        private const val KEY_IDENTIFIER_STATUS = "identifier_status"
+        private const val KEY_BATTERY_SUMMARY = "battery_summary"
+        private const val KEY_NETWORK_STATUS = "network_status"
         private const val KEY_APP_VERSION = "app_version"
 
         fun from(context: Context): AgentPreferences {
@@ -72,6 +90,15 @@ class AgentPreferences private constructor(
             lastSyncAt = prefs.getString(KEY_LAST_SYNC_AT, "") ?: "",
             lastCommandId = prefs.getString(KEY_LAST_COMMAND_ID, "") ?: "",
             lastReminder = prefs.getString(KEY_LAST_REMINDER, "") ?: "",
+            trackingEnabled = prefs.getBoolean(KEY_TRACKING_ENABLED, false),
+            lostModeEnabled = prefs.getBoolean(KEY_LOST_MODE_ENABLED, false),
+            lostModeMessage = prefs.getString(KEY_LOST_MODE_MESSAGE, "") ?: "",
+            lastLocationSummary = prefs.getString(KEY_LAST_LOCATION_SUMMARY, "") ?: "",
+            imeiDetected = prefs.getString(KEY_IMEI_DETECTED, "") ?: "",
+            serialDetected = prefs.getString(KEY_SERIAL_DETECTED, "") ?: "",
+            identifierStatus = prefs.getString(KEY_IDENTIFIER_STATUS, "") ?: "",
+            batterySummary = prefs.getString(KEY_BATTERY_SUMMARY, "") ?: "",
+            networkStatus = prefs.getString(KEY_NETWORK_STATUS, "") ?: "",
             appVersion = prefs.getString(KEY_APP_VERSION, "") ?: ""
         )
     }
@@ -139,5 +166,35 @@ class AgentPreferences private constructor(
 
     fun saveReminder(message: String) {
         prefs.edit { putString(KEY_LAST_REMINDER, message) }
+    }
+
+    fun updateRecoveryPolicy(
+        trackingEnabled: Boolean? = null,
+        lostModeEnabled: Boolean? = null,
+        lostModeMessage: String? = null
+    ) {
+        prefs.edit {
+            trackingEnabled?.let { putBoolean(KEY_TRACKING_ENABLED, it) }
+            lostModeEnabled?.let { putBoolean(KEY_LOST_MODE_ENABLED, it) }
+            lostModeMessage?.let { putString(KEY_LOST_MODE_MESSAGE, it) }
+        }
+    }
+
+    fun updateTelemetryCache(
+        locationSummary: String? = null,
+        imeiDetected: String? = null,
+        serialDetected: String? = null,
+        identifierStatus: String? = null,
+        batterySummary: String? = null,
+        networkStatus: String? = null
+    ) {
+        prefs.edit {
+            locationSummary?.let { putString(KEY_LAST_LOCATION_SUMMARY, it) }
+            imeiDetected?.let { putString(KEY_IMEI_DETECTED, it) }
+            serialDetected?.let { putString(KEY_SERIAL_DETECTED, it) }
+            identifierStatus?.let { putString(KEY_IDENTIFIER_STATUS, it) }
+            batterySummary?.let { putString(KEY_BATTERY_SUMMARY, it) }
+            networkStatus?.let { putString(KEY_NETWORK_STATUS, it) }
+        }
     }
 }

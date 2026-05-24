@@ -180,7 +180,7 @@ export async function runInstallmentScheduler(now = new Date(), tenantId?: strin
         continue;
       }
 
-      if (previousState === 'RESTRICTED' && (desiredState === 'ACTIVE' || desiredState === 'RELEASED')) {
+      if (desiredState === 'RELEASED' || (previousState === 'RESTRICTED' && desiredState === 'ACTIVE')) {
         await applyDeviceStateChange({
           deviceId: device.id,
           nextState: desiredState,

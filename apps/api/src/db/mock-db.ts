@@ -30,16 +30,26 @@ export type AuditAction =
   | 'MANUAL_OVERRIDE'
   | 'RECORD_DELETED'
   | 'DEVICE_CONTROL_RELEASE_REQUESTED'
+  | 'DEVICE_RECOVERY_UPDATED'
   | 'PASSWORD_RESET'
   | 'PORTAL_PAYMENT_NOTICE'
   | 'UNLOCK_REVIEW_REQUESTED'
   | 'POLICY_RECOMPUTED';
-export type DeviceCommandType = 'LOCK' | 'UNLOCK' | 'REMINDER' | 'SYNC' | 'RELEASE_CONTROL';
+export type DeviceCommandType =
+  | 'LOCK'
+  | 'UNLOCK'
+  | 'REMINDER'
+  | 'SYNC'
+  | 'RELEASE_CONTROL'
+  | 'REQUEST_LOCATION'
+  | 'ENABLE_LOST_MODE'
+  | 'DISABLE_LOST_MODE';
 export type DeviceCommandStatus = 'PENDING' | 'SENT' | 'ACKNOWLEDGED' | 'FAILED';
 export type ReminderStage = 'FIVE_DAYS' | 'TWO_DAYS' | 'DUE_TODAY' | 'OVERDUE_LOCK';
 export type NotificationChannel = 'FCM' | 'SMS' | 'EMAIL' | 'WHATSAPP' | 'SYSTEM';
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'FAILED' | 'SKIPPED';
 export type PersistenceEngine = 'sqlite' | 'postgres';
+export type DeviceIdentifierStatus = 'MATCHED' | 'MISMATCHED' | 'REPORTED' | 'UNAVAILABLE';
 
 export type JsonPayload = Record<string, string | number | boolean | null>;
 export interface WorkspaceSettings {
@@ -131,6 +141,25 @@ export interface DeviceRecord {
   lastSyncAt?: string;
   manualUnlockUntil?: string;
   manualUnlockReason?: string;
+  lastSeenAt?: string;
+  lastSeenReason?: string;
+  imeiDetected?: string;
+  serialDetected?: string;
+  identifierStatus?: DeviceIdentifierStatus;
+  lastLocationLat?: number;
+  lastLocationLng?: number;
+  lastLocationAccuracyMeters?: number;
+  lastLocationProvider?: string;
+  lastLocationAt?: string;
+  locationRequestPending?: boolean;
+  locationRequestReason?: string;
+  trackingEnabled?: boolean;
+  lostModeEnabled?: boolean;
+  lostModeMessage?: string;
+  lostModeUpdatedAt?: string;
+  batteryLevel?: number;
+  batteryCharging?: boolean;
+  networkStatus?: string;
   pendingDeletion?: boolean;
   deletionRequestedAt?: string;
   deletionReason?: string;

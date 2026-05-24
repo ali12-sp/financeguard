@@ -13,12 +13,33 @@ import {
 } from '../../services/device-control.js';
 import { asyncHandler } from '../../services/async-handler.js';
 import { finalizeReleaseControlAcknowledgement } from '../../services/record-deletion.js';
+import { applyDeviceTelemetry } from '../../services/device-recovery.js';
 
 const router = Router();
 
 function findDeviceBySecret(agentSecret: string) {
   return db.devices.find((item) => item.agentSecret === agentSecret) ?? null;
 }
+
+const telemetrySchema = z.object({
+  uniqueId: z.string().min(3).optional(),
+  imeiDetected: z.string().min(2).nullable().optional(),
+  serialDetected: z.string().min(2).nullable().optional(),
+  osVersion: z.string().min(1).optional(),
+  appVersion: z.string().min(1).optional(),
+  deviceOwnerPackage: z.string().nullable().optional(),
+  batteryLevel: z.number().min(0).max(100).nullable().optional(),
+  batteryCharging: z.boolean().nullable().optional(),
+  networkStatus: z.string().max(80).nullable().optional(),
+  location: z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracyMeters: z.number().nonnegative().optional(),
+    provider: z.string().max(40).optional(),
+    capturedAt: z.string().datetime().optional()
+  }).nullable().optional(),
+  telemetryReason: z.string().max(120).optional()
+});
 
 function buildSyncResponse(agentSecret: string) {
   const device = findDeviceBySecret(agentSecret);
@@ -106,7 +127,12 @@ router.post('/register', asyncHandler(async (req, res) => {
     osVersion: z.string().min(1),
     appVersion: z.string().min(1),
     enrollmentMode: z.enum(['ADB', 'QR', 'ZERO_TOUCH', 'MANUAL']).default('MANUAL'),
-    deviceOwnerPackage: z.string().nullable().optional()
+    deviceOwnerPackage: z.string().nullable().optional(),
+    imeiDetected: z.string().min(2).nullable().optional(),
+    serialDetected: z.string().min(2).nullable().optional(),
+    batteryLevel: z.number().min(0).max(100).nullable().optional(),
+    batteryCharging: z.boolean().nullable().optional(),
+    networkStatus: z.string().max(80).nullable().optional()
   });
 
   const parsed = schema.safeParse(req.body);
@@ -131,6 +157,18 @@ router.post('/register', asyncHandler(async (req, res) => {
   device.deviceOwnerPackage = parsed.data.deviceOwnerPackage ?? undefined;
   device.enrollmentStatus = 'ENROLLED';
   device.lastSyncAt = new Date().toISOString();
+  applyDeviceTelemetry(device, {
+    uniqueId: parsed.data.uniqueId,
+    imeiDetected: parsed.data.imeiDetected ?? parsed.data.imei,
+    serialDetected: parsed.data.serialDetected ?? parsed.data.serial,
+    osVersion: parsed.data.osVersion,
+    appVersion: parsed.data.appVersion,
+    deviceOwnerPackage: parsed.data.deviceOwnerPackage,
+    batteryLevel: parsed.data.batteryLevel,
+    batteryCharging: parsed.data.batteryCharging,
+    networkStatus: parsed.data.networkStatus,
+    reason: isFirstEnrollment ? 'Device registration' : 'Device re-registration'
+  });
   await persistDb();
   await recordRegistrationActivity(device.id, isFirstEnrollment);
 
@@ -146,7 +184,8 @@ router.post('/sync', asyncHandler(async (req, res) => {
     osVersion: z.string().min(1).optional(),
     appVersion: z.string().min(1).optional(),
     currentState: z.enum(['ACTIVE', 'REMINDER', 'GRACE', 'RESTRICTED', 'RELEASED']).optional(),
-    restrictionReason: z.string().nullable().optional()
+    restrictionReason: z.string().nullable().optional(),
+    telemetry: telemetrySchema.optional()
   });
 
   const parsed = schema.safeParse(req.body);
@@ -165,6 +204,16 @@ router.post('/sync', asyncHandler(async (req, res) => {
   device.osVersion = parsed.data.osVersion ?? device.osVersion;
   device.appVersion = parsed.data.appVersion ?? device.appVersion;
   device.lastSyncAt = new Date().toISOString();
+  applyDeviceTelemetry(device, {
+    ...parsed.data.telemetry,
+    uniqueId: parsed.data.telemetry?.uniqueId ?? parsed.data.uniqueId,
+    osVersion: parsed.data.telemetry?.osVersion ?? parsed.data.osVersion,
+    appVersion: parsed.data.telemetry?.appVersion ?? parsed.data.appVersion,
+    reason: parsed.data.telemetry?.telemetryReason ?? 'Device sync'
+  });
+  if (parsed.data.telemetry?.deviceOwnerPackage) {
+    device.enrollmentStatus = 'ENROLLED';
+  }
   if (parsed.data.currentState === 'RESTRICTED') {
     device.restrictionReason =
       parsed.data.restrictionReason ?? device.restrictionReason;
@@ -174,6 +223,38 @@ router.post('/sync', asyncHandler(async (req, res) => {
 
   const response = buildSyncResponse(parsed.data.agentSecret);
   return res.json(response);
+}));
+
+router.post('/telemetry', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    agentSecret: z.string().min(4).transform((value) => value.trim()),
+    telemetry: telemetrySchema
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const device = findDeviceBySecret(parsed.data.agentSecret);
+  if (!device) {
+    return res.status(404).json({ message: 'Managed device not found or secret is invalid' });
+  }
+
+  device.lastSyncAt = new Date().toISOString();
+  applyDeviceTelemetry(device, {
+    ...parsed.data.telemetry,
+    reason: parsed.data.telemetry.telemetryReason ?? 'Device telemetry'
+  });
+  await persistDb();
+
+  return res.json({
+    ok: true,
+    device: {
+      ...getDeviceSummary(device),
+      lastSyncAt: device.lastSyncAt
+    }
+  });
 }));
 
 router.post('/commands/:commandId/ack', asyncHandler(async (req, res) => {

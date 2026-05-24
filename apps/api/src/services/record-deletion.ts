@@ -22,8 +22,42 @@ function actorId(actor?: ActorInfo) {
   return actor?.id ?? 'system';
 }
 
-function isRegisteredDevice(device: DeviceRecord) {
-  return device.enrollmentStatus === 'ENROLLED';
+function hasAcknowledgedReleaseAfterLastSync(device: DeviceRecord) {
+  const latestAcknowledgedRelease = db.deviceCommands
+    .filter((item) =>
+      item.deviceId === device.id &&
+      item.type === 'RELEASE_CONTROL' &&
+      item.status === 'ACKNOWLEDGED'
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .at(0);
+
+  if (!latestAcknowledgedRelease?.acknowledgedAt) {
+    return false;
+  }
+
+  return !device.lastSyncAt || latestAcknowledgedRelease.acknowledgedAt >= device.lastSyncAt;
+}
+
+function needsControlRelease(device: DeviceRecord) {
+  if (pendingReleaseCommand(device.id)) {
+    return true;
+  }
+
+  if (device.enrollmentStatus === 'ENROLLED') {
+    return true;
+  }
+
+  if (device.state === 'RELEASED' && hasAcknowledgedReleaseAfterLastSync(device)) {
+    return false;
+  }
+
+  return Boolean(
+    device.uniqueId ||
+    device.pushToken ||
+    device.deviceOwnerPackage ||
+    device.lastSyncAt
+  );
 }
 
 function removeContractRecords(contractIds: Set<string>) {
@@ -141,6 +175,9 @@ async function queueReleaseControl(options: {
   device.adminLocked = false;
   device.adminUnlocked = false;
   device.restrictionReason = undefined;
+  device.lostModeEnabled = false;
+  device.lostModeMessage = undefined;
+  device.locationRequestPending = false;
 
   if (options.deleteAfterAck) {
     device.pendingDeletion = true;
@@ -190,7 +227,7 @@ export async function requestDeviceControlRelease(options: {
     throw new Error('Device not found');
   }
 
-  if (!isRegisteredDevice(device)) {
+  if (!needsControlRelease(device)) {
     device.state = 'RELEASED';
     device.enrollmentStatus = 'SUSPENDED';
     device.adminLocked = false;
@@ -198,6 +235,9 @@ export async function requestDeviceControlRelease(options: {
     device.restrictionReason = undefined;
     device.pushToken = undefined;
     device.deviceOwnerPackage = undefined;
+    device.lostModeEnabled = false;
+    device.lostModeMessage = undefined;
+    device.locationRequestPending = false;
     await persistDb();
     return { released: true, command: null as DeviceCommandRecord | null };
   }
@@ -223,7 +263,7 @@ export async function requestDeviceDeletion(options: {
     throw new Error('Device not found');
   }
 
-  if (isRegisteredDevice(device)) {
+  if (needsControlRelease(device)) {
     await queueReleaseControl({
       device,
       reason: options.reason,
@@ -270,7 +310,7 @@ export async function requestCustomerDeletion(options: {
     const device = db.devices.find((item) => item.id === deviceId);
     if (!device) continue;
 
-    if (isRegisteredDevice(device)) {
+    if (needsControlRelease(device)) {
       await requestDeviceDeletion({
         deviceId: device.id,
         reason: options.reason,
@@ -349,7 +389,7 @@ export async function requestWorkspaceDeletion(options: {
   tenant.deletionReason = options.reason;
 
   for (const device of db.devices.filter((item) => item.tenantId === tenant.id)) {
-    if (isRegisteredDevice(device)) {
+    if (needsControlRelease(device)) {
       await requestDeviceDeletion({
         deviceId: device.id,
         reason: options.reason,
@@ -421,6 +461,9 @@ export async function finalizeReleaseControlAcknowledgement(command: DeviceComma
     device.restrictionReason = undefined;
     device.pushToken = undefined;
     device.deviceOwnerPackage = undefined;
+    device.lostModeEnabled = false;
+    device.lostModeMessage = undefined;
+    device.locationRequestPending = false;
   }
 
   await persistDb();

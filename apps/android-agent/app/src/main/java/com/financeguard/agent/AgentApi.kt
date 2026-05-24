@@ -24,6 +24,7 @@ class AgentApi(
 ) {
     private val prefs = AgentPreferences.from(context)
     private val policyController = DevicePolicyController(context)
+    private val telemetry = DeviceTelemetry(context)
     private val client = OkHttpClient()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -48,14 +49,18 @@ class AgentApi(
         val uniqueId = policyController.stableDeviceId()
         prefs.updateIdentity(uniqueId, BuildConfig.VERSION_NAME)
         val pushToken = resolvePushToken()
+        val telemetrySnapshot = telemetry.collect(forceLocation = false)
+        telemetry.saveToPreferences(telemetrySnapshot)
+        val detectedImei = telemetrySnapshot.imeiDetected
+        val detectedSerial = telemetrySnapshot.serialDetected
 
         val payload = JSONObject().apply {
             put("agentSecret", snapshot.agentSecret)
             put("uniqueId", uniqueId)
             put("pushToken", pushToken ?: JSONObject.NULL)
             put("modelName", Build.MODEL ?: "Unknown model")
-            put("serial", Build.DEVICE ?: "Unknown serial")
-            put("imei", Build.DEVICE ?: "Unknown imei")
+            put("serial", detectedSerial ?: Build.DEVICE ?: "Unknown serial")
+            put("imei", detectedImei ?: Build.DEVICE ?: "Unknown imei")
             put("osVersion", Build.VERSION.RELEASE ?: "Unknown")
             put("appVersion", BuildConfig.VERSION_NAME)
             put(
@@ -63,15 +68,23 @@ class AgentApi(
                 if (policyController.isDeviceOwner()) "QR" else "MANUAL"
             )
             put("deviceOwnerPackage", if (policyController.isDeviceOwner()) context.packageName else JSONObject.NULL)
+            put("imeiDetected", detectedImei ?: JSONObject.NULL)
+            put("serialDetected", detectedSerial ?: JSONObject.NULL)
+            put("batteryLevel", telemetrySnapshot.batteryLevel ?: JSONObject.NULL)
+            put("batteryCharging", telemetrySnapshot.batteryCharging ?: JSONObject.NULL)
+            put("networkStatus", telemetrySnapshot.networkStatus)
         }
 
         val response = postJson("/api/agent/register", payload)
         return parseSyncPayload(response)
     }
 
-    fun syncDevice(): SyncPayload {
+    fun syncDevice(forceLocation: Boolean = false, reason: String = "Device sync"): SyncPayload {
         val snapshot = prefs.snapshot()
         val pushToken = resolvePushToken()
+        val shouldSendLocation = forceLocation || snapshot.trackingEnabled || snapshot.lostModeEnabled
+        val telemetrySnapshot = telemetry.collect(forceLocation = shouldSendLocation)
+        telemetry.saveToPreferences(telemetrySnapshot)
         val payload = JSONObject().apply {
             put("agentSecret", snapshot.agentSecret)
             put("uniqueId", snapshot.uniqueId.ifBlank { policyController.stableDeviceId() })
@@ -80,6 +93,7 @@ class AgentApi(
             put("appVersion", BuildConfig.VERSION_NAME)
             put("currentState", snapshot.currentState.name)
             put("restrictionReason", snapshot.lockMessage.ifBlank { snapshot.lastReason })
+            put("telemetry", telemetry.toJson(telemetrySnapshot, reason))
         }
 
         val response = postJson("/api/agent/sync", payload)
@@ -94,6 +108,20 @@ class AgentApi(
         }
 
         postJson("/api/agent/commands/$commandId/ack", payload)
+    }
+
+    fun uploadTelemetry(forceLocation: Boolean, reason: String) {
+        val snapshot = telemetry.collect(forceLocation = forceLocation)
+        telemetry.saveToPreferences(snapshot)
+        val payload = JSONObject().apply {
+            put("agentSecret", prefs.snapshot().agentSecret)
+            put("telemetry", telemetry.toJson(snapshot, reason))
+        }
+
+        val response = postJson("/api/agent/telemetry", payload)
+        response.optJSONObject("device")?.let { device ->
+            telemetry.saveToPreferences(snapshot, device.optString("identifierStatus", ""))
+        }
     }
 
     private fun parseSyncPayload(response: JSONObject): SyncPayload {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import LayoutShell from '../../components/layout-shell';
 import { apiDelete, apiFetch, apiPost } from '../../components/api';
-import { formatCurrency } from '../../components/formatters';
+import { formatCurrency, formatDateTime } from '../../components/formatters';
 import { getStoredUser } from '../../components/session';
 
 interface Device {
@@ -25,6 +25,40 @@ interface Device {
   manualUnlockActive?: boolean;
   adminUnlocked?: boolean;
   pendingDeletion?: boolean;
+  lastSyncAt?: string;
+  lastSeenAt?: string;
+  lastSeenReason?: string;
+  imeiDetected?: string;
+  serialDetected?: string;
+  identifierStatus?: 'MATCHED' | 'MISMATCHED' | 'REPORTED' | 'UNAVAILABLE';
+  lastLocationLat?: number;
+  lastLocationLng?: number;
+  lastLocationAccuracyMeters?: number;
+  lastLocationProvider?: string;
+  lastLocationAt?: string;
+  locationRequestPending?: boolean;
+  locationRequestReason?: string;
+  trackingEnabled?: boolean;
+  lostModeEnabled?: boolean;
+  lostModeMessage?: string;
+  batteryLevel?: number;
+  batteryCharging?: boolean;
+  networkStatus?: string;
+}
+
+function mapsUrl(row: Device) {
+  if (typeof row.lastLocationLat !== 'number' || typeof row.lastLocationLng !== 'number') {
+    return undefined;
+  }
+
+  return `https://www.google.com/maps/search/?api=1&query=${row.lastLocationLat},${row.lastLocationLng}`;
+}
+
+function identifierBadgeClass(status?: Device['identifierStatus']) {
+  if (status === 'MATCHED') return 'active';
+  if (status === 'MISMATCHED') return 'restricted';
+  if (status === 'REPORTED') return 'info';
+  return 'pending';
 }
 
 export default function DevicesPage() {
@@ -48,6 +82,8 @@ export default function DevicesPage() {
     qrNotes: string[];
     agentApkDownloadUrl?: string;
     agentApkChecksum?: string;
+    qrMissingRequirements?: string[];
+    qrExpiresAt?: string | null;
     qrPayload?: string;
     qrPayloadPretty?: string;
   } | null>(null);
@@ -128,6 +164,43 @@ export default function DevicesPage() {
     }
   }
 
+  async function requestLocation(row: Device) {
+    setStatus(`Requesting recovery location for ${row.id}...`);
+
+    try {
+      await apiPost(`/devices/${row.id}/request-location`, {
+        reason: 'Admin requested recovery location from the dashboard.'
+      });
+      setStatus(row.pushToken ? 'Location request sent.' : 'Location request queued. The phone will report when it syncs.');
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to request location');
+    }
+  }
+
+  async function setLostMode(row: Device, enabled: boolean) {
+    const defaultMessage = row.lostModeMessage || 'This managed phone has been marked lost. Please contact the seller or office.';
+    const message = enabled
+      ? window.prompt('Lost mode message shown on the phone', defaultMessage)
+      : undefined;
+    if (enabled && !message?.trim()) {
+      return;
+    }
+
+    setStatus(`${enabled ? 'Enabling' : 'Disabling'} lost mode for ${row.id}...`);
+
+    try {
+      await apiPost(`/devices/${row.id}/lost-mode`, {
+        enabled,
+        message: message?.trim()
+      });
+      setStatus(enabled ? 'Lost mode enabled and location requested.' : 'Lost mode disabled.');
+      loadDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Unable to update lost mode');
+    }
+  }
+
   async function overrideUnlock(row: Device) {
     const reason = window.prompt(
       'Reason for manual unlock override',
@@ -204,28 +277,16 @@ export default function DevicesPage() {
         };
         adbCommand: string;
         qrNotes: string[];
+        agentApkDownloadUrl?: string;
+        agentApkChecksum?: string;
+        qrMissingRequirements?: string[];
+        qrExpiresAt?: string | null;
+        qrPayload?: string;
+        qrPayloadPretty?: string;
       }>(`/devices/${deviceId}/provisioning`);
-      const workspaceSettings = getStoredUser()?.workspaceSettings;
-      const agentApkDownloadUrl = workspaceSettings?.agentApkDownloadUrl?.trim() || undefined;
-      const agentApkChecksum = workspaceSettings?.agentApkChecksum?.trim() || undefined;
-      const qrPayloadData =
-        agentApkDownloadUrl && agentApkChecksum
-          ? {
-              'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': details.adminComponent,
-              'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': agentApkDownloadUrl,
-              'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM': agentApkChecksum,
-              'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': details.adminExtras
-            }
-          : undefined;
-      const qrPayload = qrPayloadData ? JSON.stringify(qrPayloadData) : undefined;
-      const qrPayloadPretty = qrPayloadData ? JSON.stringify(qrPayloadData, null, 2) : undefined;
 
       setProvisioning({
-        ...details,
-        agentApkDownloadUrl,
-        agentApkChecksum,
-        qrPayload,
-        qrPayloadPretty
+        ...details
       });
       setStatus(`Provisioning details loaded for ${deviceId}.`);
     } catch (error) {
@@ -262,6 +323,7 @@ export default function DevicesPage() {
             <div><strong>ADB Command</strong><div className="inline-note mono">{provisioning.adbCommand}</div></div>
             <div><strong>APK Download URL</strong><div className="inline-note mono">{provisioning.agentApkDownloadUrl || 'Set this in Workspaces once and the QR will auto-generate here.'}</div></div>
             <div><strong>APK Checksum</strong><div className="inline-note mono">{provisioning.agentApkChecksum || 'Missing'}</div></div>
+            <div><strong>QR Expiry</strong><div className="inline-note">{provisioning.qrExpiresAt ? new Date(provisioning.qrExpiresAt).toLocaleString() : 'No built-in expiry'}</div></div>
             <div>
               <strong>QR Notes</strong>
               {provisioning.qrNotes.map((note) => (
@@ -301,12 +363,29 @@ export default function DevicesPage() {
               </div>
             ) : (
               <div className="inline-note" style={{ marginTop: 12 }}>
-                Add the agent APK download URL and checksum in Workspace settings once, then this page will generate the QR code automatically for every device.
+                Add {provisioning.qrMissingRequirements?.join(' and ') || 'the agent APK download URL and checksum'} in Workspace settings once, then this page will generate the QR code automatically for every device.
               </div>
             )}
           </div>
         </div>
       ) : null}
+      <div className="grid grid-3" style={{ marginTop: 20 }}>
+        <div className="card">
+          <h2 className="section-title">Recovery Ready</h2>
+          <div className="topbar-title">{rows.filter((row) => row.trackingEnabled).length}</div>
+          <div className="inline-note">Devices with tracking/recovery enabled</div>
+        </div>
+        <div className="card">
+          <h2 className="section-title">Lost Mode</h2>
+          <div className="topbar-title">{rows.filter((row) => row.lostModeEnabled).length}</div>
+          <div className="inline-note">Phones currently marked lost or stolen</div>
+        </div>
+        <div className="card">
+          <h2 className="section-title">Located</h2>
+          <div className="topbar-title">{rows.filter((row) => typeof row.lastLocationLat === 'number').length}</div>
+          <div className="inline-note">Devices with at least one GPS/network fix</div>
+        </div>
+      </div>
       <div className="card" style={{ marginTop: 20 }}>
         <div className="table-wrap">
         <table className="table">
@@ -320,6 +399,7 @@ export default function DevicesPage() {
               <th>Live State</th>
               <th>Policy State</th>
               <th>Delivery</th>
+              <th>Recovery</th>
               <th>Balance</th>
               <th>Reason</th>
               <th>Override</th>
@@ -344,6 +424,37 @@ export default function DevicesPage() {
                   ) : null}
                 </td>
                 <td>{row.pendingDeletion ? 'Release pending' : row.pushToken ? 'Push ready' : 'Polling only'}</td>
+                <td>
+                  <div>
+                    {row.lostModeEnabled ? (
+                      <span className="badge restricted">LOST MODE</span>
+                    ) : row.trackingEnabled ? (
+                      <span className="badge active">TRACKING</span>
+                    ) : (
+                      <span className="badge pending">IDLE</span>
+                    )}
+                    {row.locationRequestPending ? <span className="badge queued" style={{ marginLeft: 6 }}>LOCATING</span> : null}
+                  </div>
+                  <div className="inline-note">Seen: {formatDateTime(row.lastSeenAt ?? row.lastSyncAt)}</div>
+                  {mapsUrl(row) ? (
+                    <a className="inline-note" href={mapsUrl(row)} target="_blank" rel="noreferrer">
+                      Map: {row.lastLocationLat?.toFixed(5)}, {row.lastLocationLng?.toFixed(5)}
+                    </a>
+                  ) : (
+                    <div className="inline-note">Map: waiting for location</div>
+                  )}
+                  {row.lastLocationAt ? (
+                    <div className="inline-note">
+                      {formatDateTime(row.lastLocationAt)} | {row.lastLocationAccuracyMeters ? `${Math.round(row.lastLocationAccuracyMeters)}m` : 'accuracy n/a'}
+                    </div>
+                  ) : null}
+                  <div className="inline-note">
+                    IMEI: {row.imeiDetected || row.imei || '-'} <span className={`badge ${identifierBadgeClass(row.identifierStatus)}`}>{row.identifierStatus || 'UNAVAILABLE'}</span>
+                  </div>
+                  <div className="inline-note">
+                    Battery: {typeof row.batteryLevel === 'number' ? `${row.batteryLevel}%${row.batteryCharging ? ' charging' : ''}` : '-'} | {row.networkStatus || 'network n/a'}
+                  </div>
+                </td>
                 <td>{formatCurrency(row.remainingBalance)}</td>
                 <td>{row.restrictionReason || '-'}</td>
                 <td>
@@ -390,6 +501,30 @@ export default function DevicesPage() {
                     >
                       Sync
                     </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => requestLocation(row)}
+                    >
+                      Locate
+                    </button>
+                    {row.lostModeEnabled ? (
+                      <button
+                        type="button"
+                        className="success-button"
+                        onClick={() => setLostMode(row, false)}
+                      >
+                        Clear Lost
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => setLostMode(row, true)}
+                      >
+                        Lost Mode
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="ghost-button"

@@ -4,6 +4,7 @@ export type ContractStatus = 'ACTIVE' | 'LATE' | 'RESTRICTED' | 'COMPLETED' | 'C
 export type InstallmentStatus = 'UPCOMING' | 'DUE' | 'GRACE' | 'OVERDUE' | 'PAID';
 export type PaymentMatchMode = 'AUTO' | 'MANUAL_OVERRIDE';
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'EASYPAISA' | 'JAZZCASH' | 'CARD' | 'OTHER';
+export type DeviceIdentifierStatus = 'MATCHED' | 'MISMATCHED' | 'REPORTED' | 'UNAVAILABLE';
 
 export type AuditAction =
   | 'CUSTOMER_CREATED'
@@ -17,6 +18,7 @@ export type AuditAction =
   | 'MANUAL_OVERRIDE'
   | 'RECORD_DELETED'
   | 'DEVICE_CONTROL_RELEASE_REQUESTED'
+  | 'DEVICE_RECOVERY_UPDATED'
   | 'PASSWORD_RESET'
   | 'PORTAL_PAYMENT_NOTICE'
   | 'UNLOCK_REVIEW_REQUESTED'
@@ -55,6 +57,25 @@ export interface Device {
   manualUnlockUntil?: string;
   manualUnlockReason?: string;
   pendingDeletion?: boolean;
+  lastSeenAt?: string;
+  lastSeenReason?: string;
+  imeiDetected?: string;
+  serialDetected?: string;
+  identifierStatus?: DeviceIdentifierStatus;
+  lastLocationLat?: number;
+  lastLocationLng?: number;
+  lastLocationAccuracyMeters?: number;
+  lastLocationProvider?: string;
+  lastLocationAt?: string;
+  locationRequestPending?: boolean;
+  locationRequestReason?: string;
+  trackingEnabled?: boolean;
+  lostModeEnabled?: boolean;
+  lostModeMessage?: string;
+  lostModeUpdatedAt?: string;
+  batteryLevel?: number;
+  batteryCharging?: boolean;
+  networkStatus?: string;
 }
 
 export interface Contract {

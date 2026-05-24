@@ -13,6 +13,11 @@ import {
 } from '../../services/device-control.js';
 import { asyncHandler } from '../../services/async-handler.js';
 import { createAgentSecret } from '../../services/secrets.js';
+import { buildAndroidProvisioningPayload } from '../../services/provisioning.js';
+import {
+  requestDeviceLocation,
+  setDeviceLostMode
+} from '../../services/device-recovery.js';
 import {
   requestDeviceControlRelease,
   requestDeviceDeletion
@@ -130,7 +135,16 @@ router.post('/:id/manual-unlock', asyncHandler(async (req, res) => {
 
 router.post('/:id/commands', async (req, res) => {
   const schema = z.object({
-    type: z.enum(['LOCK', 'UNLOCK', 'REMINDER', 'SYNC', 'RELEASE_CONTROL']),
+    type: z.enum([
+      'LOCK',
+      'UNLOCK',
+      'REMINDER',
+      'SYNC',
+      'RELEASE_CONTROL',
+      'REQUEST_LOCATION',
+      'ENABLE_LOST_MODE',
+      'DISABLE_LOST_MODE'
+    ]),
     reason: z.string().min(3),
     lockMessage: z.string().optional(),
     payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
@@ -162,6 +176,66 @@ router.post('/:id/commands', async (req, res) => {
     return res.status(404).json({ message: error instanceof Error ? error.message : 'Device not found' });
   }
 });
+
+router.post('/:id/request-location', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    reason: z.string().min(3).max(160).default('Admin requested recovery location from the dashboard.')
+  });
+
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
+  if (!device) {
+    return res.status(404).json({ message: 'Device not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await requestDeviceLocation({
+    deviceId: device.id,
+    reason: parsed.data.reason,
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.json({
+    ...getDeviceSummary(result.device),
+    latestCommand: result.command
+  });
+}));
+
+router.post('/:id/lost-mode', asyncHandler(async (req, res) => {
+  const schema = z.object({
+    enabled: z.boolean(),
+    message: z.string().min(3).max(220).optional()
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+  }
+
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
+  if (!device) {
+    return res.status(404).json({ message: 'Device not found' });
+  }
+
+  const actor = (req as AuthRequest).user;
+  const result = await setDeviceLostMode({
+    deviceId: device.id,
+    enabled: parsed.data.enabled,
+    message: parsed.data.message,
+    actor: actor ? { id: actor.id, email: actor.email } : undefined
+  });
+
+  res.json({
+    ...getDeviceSummary(result.device),
+    latestCommand: result.command
+  });
+}));
 
 router.post('/:id/release-control', asyncHandler(async (req, res) => {
   const schema = z.object({
@@ -250,27 +324,41 @@ router.get('/:id/provisioning', (req, res) => {
   const device = scopeToTenant(db.devices, tenantId).find((item) => item.id === req.params.id);
   if (!device) return res.status(404).json({ message: 'Device not found' });
   const tenant = db.tenants.find((item) => item.id === tenantId) ?? null;
+  const adminComponent = 'com.financeguard.agent/.FinanceGuardDeviceAdminReceiver';
+  const organizationId = tenant?.slug ?? tenantId;
+  const organizationName = tenant?.name ?? 'FinanceGuard Workspace';
+  const frpAccountsCsv = (tenant?.settings.frpGoogleAccounts ?? []).join(',');
+  const provisioning = buildAndroidProvisioningPayload({
+    adminComponent,
+    apiBaseUrl: env.publicApiUrl,
+    agentSecret: device.agentSecret,
+    deviceId: device.id,
+    organizationId,
+    organizationName,
+    frpAccountsCsv,
+    settings: tenant?.settings
+  });
 
   res.json({
     deviceId: device.id,
     agentSecret: device.agentSecret,
-    adminComponent: 'com.financeguard.agent/.FinanceGuardDeviceAdminReceiver',
+    adminComponent,
     apiBaseUrl: env.publicApiUrl,
-    organizationId: tenant?.slug ?? tenantId,
+    organizationId,
     frpGoogleAccounts: tenant?.settings.frpGoogleAccounts ?? [],
-    adminExtras: {
-      apiBaseUrl: env.publicApiUrl,
-      agentSecret: device.agentSecret,
-      deviceId: device.id,
-      organizationId: tenant?.slug ?? tenantId,
-      organizationName: tenant?.name ?? 'FinanceGuard Workspace',
-      frpAccountsCsv: (tenant?.settings.frpGoogleAccounts ?? []).join(',')
-    },
+    adminExtras: provisioning.adminExtras,
+    agentApkDownloadUrl: provisioning.agentApkDownloadUrl,
+    agentApkChecksum: provisioning.agentApkChecksum,
+    qrPayload: provisioning.qrPayload,
+    qrPayloadPretty: provisioning.qrPayloadPretty,
+    qrMissingRequirements: provisioning.missingRequirements,
+    qrExpiresAt: null,
     adbCommand:
       'adb shell dpm set-device-owner com.financeguard.agent/.FinanceGuardDeviceAdminReceiver',
     qrNotes: [
-      'Host the APK on HTTPS and calculate its SHA-256 checksum before generating a production QR code.',
-      'Include the admin extras bundle from this response in your QR payload so the app can auto-register.'
+      'Use a stable HTTPS APK download URL. Temporary tunnel or signed storage URLs can make the QR stop working.',
+      'The APK checksum is normalized to Android provisioning format when a 64-character SHA-256 hex value is saved.',
+      'This QR has no built-in expiry; it remains valid while the device record and APK URL/checksum stay unchanged.'
     ]
   });
 });

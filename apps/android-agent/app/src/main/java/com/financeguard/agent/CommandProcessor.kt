@@ -65,6 +65,7 @@ class CommandProcessor(
         val type = command.optString("type")
         val reason = command.optString("reason")
         val lockMessage = command.optString("lockMessage")
+        val payload = command.optJSONObject("payload") ?: JSONObject()
 
         when (type) {
             "LOCK" -> {
@@ -112,6 +113,62 @@ class CommandProcessor(
                 policyController.enforceSavedState()
             }
 
+            "REQUEST_LOCATION" -> {
+                api.uploadTelemetry(
+                    forceLocation = true,
+                    reason = reason.ifBlank { "Admin requested recovery location" }
+                )
+                NotificationHelper.showReminder(
+                    context = context,
+                    title = "Recovery location shared",
+                    message = "This managed device reported its recovery location to the administrator."
+                )
+                prefs.updateState(
+                    state = prefs.snapshot().currentState,
+                    reason = reason.ifBlank { "Recovery location reported" },
+                    lastCommandId = commandId
+                )
+            }
+
+            "ENABLE_LOST_MODE" -> {
+                val message = payload.optString(
+                    "lostModeMessage",
+                    "This managed phone has been marked lost. Please contact the seller or office."
+                ).ifBlank {
+                    "This managed phone has been marked lost. Please contact the seller or office."
+                }
+                prefs.updateRecoveryPolicy(
+                    trackingEnabled = true,
+                    lostModeEnabled = true,
+                    lostModeMessage = message
+                )
+                prefs.updateState(
+                    state = DeviceState.RESTRICTED,
+                    reason = reason.ifBlank { "Lost mode enabled by administrator" },
+                    lockMessage = message,
+                    lastCommandId = commandId
+                )
+                api.uploadTelemetry(
+                    forceLocation = true,
+                    reason = "Lost mode enabled; reporting recovery location"
+                )
+                policyController.applyRestrictedMode(message)
+            }
+
+            "DISABLE_LOST_MODE" -> {
+                prefs.updateRecoveryPolicy(
+                    lostModeEnabled = false,
+                    lostModeMessage = ""
+                )
+                prefs.updateState(
+                    state = DeviceState.ACTIVE,
+                    reason = reason.ifBlank { "Lost mode disabled by administrator" },
+                    lockMessage = "",
+                    lastCommandId = commandId
+                )
+                policyController.applyUnlockedMode(returnHome = true)
+            }
+
             "RELEASE_CONTROL" -> {
                 prefs.updateState(
                     state = DeviceState.RELEASED,
@@ -128,6 +185,37 @@ class CommandProcessor(
         val serverState = stateRepository.fromServer(device.optString("state"))
         val snapshot = prefs.snapshot()
         val reason = device.optString("restrictionReason", snapshot.lastReason)
+        val trackingEnabled =
+            if (device.has("trackingEnabled")) device.optBoolean("trackingEnabled") else snapshot.trackingEnabled
+        val lostModeEnabled =
+            if (device.has("lostModeEnabled")) device.optBoolean("lostModeEnabled") else snapshot.lostModeEnabled
+        val lostModeMessage = device.optString("lostModeMessage", snapshot.lostModeMessage).ifBlank {
+            "This managed phone has been marked lost. Please contact the seller or office."
+        }
+        prefs.updateRecoveryPolicy(
+            trackingEnabled = trackingEnabled,
+            lostModeEnabled = lostModeEnabled,
+            lostModeMessage = if (lostModeEnabled) lostModeMessage else ""
+        )
+        prefs.updateTelemetryCache(
+            locationSummary = locationSummary(device),
+            imeiDetected = device.optString("imeiDetected", snapshot.imeiDetected),
+            serialDetected = device.optString("serialDetected", snapshot.serialDetected),
+            identifierStatus = device.optString("identifierStatus", snapshot.identifierStatus),
+            batterySummary = batterySummary(device),
+            networkStatus = device.optString("networkStatus", snapshot.networkStatus)
+        )
+
+        if (lostModeEnabled) {
+            prefs.updateState(
+                state = DeviceState.RESTRICTED,
+                reason = "Lost mode active",
+                lockMessage = lostModeMessage
+            )
+            policyController.applyRestrictedMode(lostModeMessage)
+            return
+        }
+
         val lockMessage = reason.ifBlank {
             snapshot.lockMessage.ifBlank {
                 "Payment overdue. Contact FinanceGuard to unlock this device."
@@ -146,7 +234,7 @@ class CommandProcessor(
 
             DeviceState.ACTIVE,
             DeviceState.RELEASED -> {
-                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED
+                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED || snapshot.lostModeEnabled
                 prefs.updateState(
                     state = serverState,
                     reason = reason,
@@ -157,7 +245,7 @@ class CommandProcessor(
 
             DeviceState.REMINDER,
             DeviceState.GRACE -> {
-                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED
+                val wasRestricted = snapshot.currentState == DeviceState.RESTRICTED || snapshot.lostModeEnabled
                 prefs.updateState(
                     state = serverState,
                     reason = reason,
@@ -166,5 +254,25 @@ class CommandProcessor(
                 policyController.applyUnlockedMode(returnHome = wasRestricted)
             }
         }
+    }
+
+    private fun locationSummary(device: JSONObject): String {
+        if (!device.has("lastLocationLat") || !device.has("lastLocationLng")) {
+            return prefs.snapshot().lastLocationSummary
+        }
+
+        val lat = device.optDouble("lastLocationLat")
+        val lng = device.optDouble("lastLocationLng")
+        val provider = device.optString("lastLocationProvider", "provider n/a")
+        return "${"%.5f".format(lat)}, ${"%.5f".format(lng)} ($provider)"
+    }
+
+    private fun batterySummary(device: JSONObject): String {
+        if (!device.has("batteryLevel")) {
+            return prefs.snapshot().batterySummary
+        }
+
+        val charging = if (device.optBoolean("batteryCharging")) " charging" else ""
+        return "${device.optInt("batteryLevel")}%$charging"
     }
 }

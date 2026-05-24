@@ -12,6 +12,16 @@ import {
 import { getRemainingBalance } from '../modules/contracts/ledger.js';
 import { sendFcmDataMessage } from './fcm.js';
 
+const STATE_COMMAND_TYPES = new Set<DeviceCommandType>([
+  'LOCK',
+  'UNLOCK',
+  'RELEASE_CONTROL'
+]);
+const RECOVERY_MODE_COMMAND_TYPES = new Set<DeviceCommandType>([
+  'ENABLE_LOST_MODE',
+  'DISABLE_LOST_MODE'
+]);
+
 export interface ActorInfo {
   id?: string;
   name?: string;
@@ -50,8 +60,91 @@ function auditActionForState(nextState: DeviceState) {
 
 function commandTypeForState(nextState: DeviceState): DeviceCommandType | null {
   if (nextState === 'RESTRICTED') return 'LOCK';
-  if (nextState === 'ACTIVE' || nextState === 'RELEASED') return 'UNLOCK';
+  if (nextState === 'RELEASED') return 'RELEASE_CONTROL';
+  if (nextState === 'ACTIVE') return 'UNLOCK';
   return null;
+}
+
+function isStateCommand(command: Pick<DeviceCommandRecord, 'type'>) {
+  return STATE_COMMAND_TYPES.has(command.type);
+}
+
+function isRecoveryModeCommand(command: Pick<DeviceCommandRecord, 'type'>) {
+  return RECOVERY_MODE_COMMAND_TYPES.has(command.type);
+}
+
+function commandSequence(commandId: string) {
+  const match = commandId.match(/^cmd(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function compareDeviceCommands(left: DeviceCommandRecord, right: DeviceCommandRecord) {
+  const createdAtOrder = left.createdAt.localeCompare(right.createdAt);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder;
+  }
+
+  const leftSequence = commandSequence(left.id);
+  const rightSequence = commandSequence(right.id);
+  if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+    return leftSequence - rightSequence;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function getLatestStateCommandForDevice(deviceId: string) {
+  return db.deviceCommands
+    .filter((item) => item.deviceId === deviceId && isStateCommand(item))
+    .slice()
+    .sort(compareDeviceCommands)
+    .at(-1) ?? null;
+}
+
+function getLatestRecoveryModeCommandForDevice(deviceId: string) {
+  return db.deviceCommands
+    .filter((item) => item.deviceId === deviceId && isRecoveryModeCommand(item))
+    .slice()
+    .sort(compareDeviceCommands)
+    .at(-1) ?? null;
+}
+
+function supersedeOlderCommands(
+  deviceId: string,
+  supersedingCommand: DeviceCommandRecord,
+  commandSet: Set<DeviceCommandType>
+) {
+  if (!commandSet.has(supersedingCommand.type)) {
+    return false;
+  }
+
+  let changed = false;
+  const now = new Date().toISOString();
+
+  for (const command of db.deviceCommands) {
+    if (
+      command.deviceId !== deviceId ||
+      command.id === supersedingCommand.id ||
+      command.status === 'ACKNOWLEDGED' ||
+      !commandSet.has(command.type) ||
+      compareDeviceCommands(command, supersedingCommand) > 0
+    ) {
+      continue;
+    }
+
+    command.status = 'ACKNOWLEDGED';
+    command.acknowledgedAt = now;
+    command.responseNote = `Superseded by ${supersedingCommand.id}.`;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function supersedeOlderExclusiveCommands(deviceId: string, supersedingCommand: DeviceCommandRecord) {
+  const stateChanged = supersedeOlderCommands(deviceId, supersedingCommand, STATE_COMMAND_TYPES);
+  const recoveryChanged = supersedeOlderCommands(deviceId, supersedingCommand, RECOVERY_MODE_COMMAND_TYPES);
+  return stateChanged || recoveryChanged;
 }
 
 function toFcmPayload(command: DeviceCommandRecord) {
@@ -91,6 +184,7 @@ export async function issueDeviceCommand(options: {
     ...options,
     tenantId: device.tenantId
   });
+  supersedeOlderExclusiveCommands(device.id, command);
   device.lastCommandId = command.id;
   await persistDb();
 
@@ -256,9 +350,18 @@ export async function applyManualUnlockOverride(options: {
 }
 
 export function getPendingCommandsForDevice(deviceId: string) {
-  return db.deviceCommands.filter(
-    (item) => item.deviceId === deviceId && item.status !== 'ACKNOWLEDGED'
-  );
+  const latestStateCommand = getLatestStateCommandForDevice(deviceId);
+  const latestRecoveryModeCommand = getLatestRecoveryModeCommandForDevice(deviceId);
+
+  return db.deviceCommands
+    .filter((item) =>
+      item.deviceId === deviceId &&
+      item.status !== 'ACKNOWLEDGED' &&
+      (!isStateCommand(item) || item.id === latestStateCommand?.id) &&
+      (!isRecoveryModeCommand(item) || item.id === latestRecoveryModeCommand?.id)
+    )
+    .slice()
+    .sort(compareDeviceCommands);
 }
 
 export async function acknowledgeDeviceCommand(options: {
