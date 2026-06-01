@@ -5,6 +5,7 @@ import {
   type NotificationChannel,
   type ReminderStage
 } from '../db/mock-db.js';
+import { logger } from './logger.js';
 import {
   deriveContractStatus,
   evaluatePolicy,
@@ -70,6 +71,33 @@ function hasReminderBeenRecorded(installmentId: string, stage: ReminderStage) {
   );
 }
 
+/**
+ * Find PENDING or SENT commands that have not been acknowledged within
+ * COMMAND_TIMEOUT_MS (default 2 hours). Mark them FAILED so the scheduler
+ * can re-issue fresh commands.
+ */
+const COMMAND_TIMEOUT_MS = Number(process.env.COMMAND_TIMEOUT_MS ?? 2 * 60 * 60 * 1000);
+
+export async function retryStaleDeviceCommands(now = new Date()) {
+  const cutoff = new Date(now.getTime() - COMMAND_TIMEOUT_MS).toISOString();
+  const stale = db.deviceCommands.filter(
+    (cmd) =>
+      (cmd.status === 'PENDING' || cmd.status === 'SENT') &&
+      cmd.createdAt < cutoff
+  );
+
+  if (stale.length === 0) return { timedOut: 0 };
+
+  for (const cmd of stale) {
+    cmd.status = 'FAILED';
+    cmd.responseNote = `Timed out after ${COMMAND_TIMEOUT_MS / 60000} minutes without acknowledgement.`;
+    logger.warn('Device command timed out', { commandId: cmd.id, deviceId: cmd.deviceId, type: cmd.type });
+  }
+
+  await persistDb();
+  return { timedOut: stale.length };
+}
+
 export async function runInstallmentScheduler(now = new Date(), tenantId?: string) {
   lastRunStartedAt = new Date().toISOString();
   lastRunError = null;
@@ -78,6 +106,12 @@ export async function runInstallmentScheduler(now = new Date(), tenantId?: strin
   let autoUnlocks = 0;
 
   try {
+    // First: expire stale commands so fresh ones can be issued
+    const retryResult = await retryStaleDeviceCommands(now);
+    if (retryResult.timedOut > 0) {
+      logger.warn('Stale device commands marked as failed', retryResult);
+    }
+
     const tenantContracts = scopeToTenant(db.contracts, tenantId);
 
     for (const contract of tenantContracts) {
@@ -86,6 +120,34 @@ export async function runInstallmentScheduler(now = new Date(), tenantId?: strin
       const nextInstallment = getNextUnpaidInstallment(contract.id, contract.tenantId);
       const desiredState = evaluatePolicy(contract, now);
       const desiredStatus = deriveContractStatus(contract, now);
+
+      // Enforce manual unlock expiry: if the override window has passed and
+      // the contract still requires restriction, re-lock the device.
+      if (
+        device &&
+        device.manualUnlockUntil &&
+        new Date(device.manualUnlockUntil) <= now &&
+        desiredState === 'RESTRICTED' &&
+        !device.adminLocked
+      ) {
+        logger.info('Manual unlock window expired – re-locking device', {
+          deviceId: device.id,
+          contractId: contract.id,
+          expiredAt: device.manualUnlockUntil
+        });
+        device.manualUnlockUntil = undefined;
+        device.manualUnlockReason = undefined;
+        await applyDeviceStateChange({
+          deviceId: device.id,
+          nextState: 'RESTRICTED',
+          reason: 'Manual unlock override expired. Device re-locked due to overdue installment.',
+          source: 'SCHEDULER',
+          actor: { id: 'system', name: 'System' },
+          lockMessage: 'Installment overdue. Please pay to restore access.'
+        });
+        autoLocks += 1;
+        continue;
+      }
 
       if (nextInstallment && customer) {
         const daysUntilDue = diffInDays(parseDateOnly(nextInstallment.dueDate), now);

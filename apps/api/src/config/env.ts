@@ -9,6 +9,7 @@ function parseOrigins(value?: string) {
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
+  logLevel: process.env.LOG_LEVEL || '',   // debug | info | warn | error (auto-selected if empty)
   port: Number(process.env.PORT || 4000),
   jwtSecret: process.env.JWT_SECRET || 'change-me',
   publicApiUrl: process.env.PUBLIC_API_URL || `http://localhost:${Number(process.env.PORT || 4000)}`,
@@ -42,6 +43,8 @@ export const env = {
   fcmProjectId: process.env.FCM_PROJECT_ID || '',
   fcmClientEmail: process.env.FCM_CLIENT_EMAIL || '',
   fcmPrivateKey: (process.env.FCM_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+  commandTimeoutMs: Number(process.env.COMMAND_TIMEOUT_MS || 2 * 60 * 60 * 1000),
+  backupEncryptionKey: process.env.BACKUP_ENCRYPTION_KEY || '',
 };
 
 if (env.nodeEnv === 'production') {

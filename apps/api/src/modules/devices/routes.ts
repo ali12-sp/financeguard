@@ -22,12 +22,82 @@ import {
   requestDeviceControlRelease,
   requestDeviceDeletion
 } from '../../services/record-deletion.js';
+import { isDeviceSyncStale } from '../../services/device-health.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
   const tenantId = getTenantIdFromAuth(req as AuthRequest);
   res.json(scopeToTenant(db.devices, tenantId).map((device) => getDeviceSummary(device)));
+});
+
+/**
+ * GET /api/devices/health-summary
+ * Returns lists of devices that need attention: stale sync, missing FCM,
+ * long-pending enrollment, or stuck commands.
+ */
+router.get('/health-summary', (req, res) => {
+  const tenantId = getTenantIdFromAuth(req as AuthRequest);
+  const devices = scopeToTenant(db.devices, tenantId);
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const twoDaysAgo   = new Date(now.getTime() - 2 * 86400000).toISOString();
+  const twoHoursAgo  = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
+
+  const enrolled = devices.filter((d) => d.enrollmentStatus === 'ENROLLED');
+  const notSynced24h = enrolled.filter((d) => isDeviceSyncStale(d)).map((d) => ({
+    id: d.id, serial: d.serial, modelName: d.modelName, lastSyncAt: d.lastSyncAt ?? null
+  }));
+
+  const noFcmToken = enrolled.filter((d) => !d.pushToken).map((d) => ({
+    id: d.id, serial: d.serial, modelName: d.modelName
+  }));
+
+  const enrollmentPending = devices
+    .filter((d) => d.enrollmentStatus === 'PENDING' && (d as { createdAt?: string }).createdAt
+      ? ((d as { createdAt?: string }).createdAt ?? '') < sevenDaysAgo
+      : false
+    ).map((d) => ({ id: d.id, serial: d.serial, modelName: d.modelName }));
+
+  const stuckCommands = db.deviceCommands
+    .filter((cmd) =>
+      cmd.tenantId === tenantId &&
+      (cmd.status === 'PENDING' || cmd.status === 'SENT') &&
+      cmd.createdAt < twoHoursAgo
+    )
+    .slice(0, 20)
+    .map((cmd) => {
+      const device = devices.find((d) => d.id === cmd.deviceId);
+      return {
+        commandId: cmd.id,
+        type: cmd.type,
+        status: cmd.status,
+        deviceId: cmd.deviceId,
+        deviceSerial: device?.serial ?? '?',
+        createdAt: cmd.createdAt
+      };
+    });
+
+  const recentlySynced = enrolled
+    .filter((d) => d.lastSyncAt && d.lastSyncAt > twoDaysAgo)
+    .length;
+
+  res.json({
+    generatedAt: now.toISOString(),
+    summary: {
+      totalDevices: devices.length,
+      enrolledDevices: enrolled.length,
+      notSynced24hCount: notSynced24h.length,
+      noFcmTokenCount: noFcmToken.length,
+      enrollmentPendingCount: enrollmentPending.length,
+      stuckCommandCount: stuckCommands.length,
+      recentlySyncedCount: recentlySynced
+    },
+    notSynced24h,
+    noFcmToken,
+    enrollmentPending,
+    stuckCommands
+  });
 });
 
 router.post('/', asyncHandler(async (req, res) => {

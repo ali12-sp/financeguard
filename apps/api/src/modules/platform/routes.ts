@@ -7,6 +7,8 @@ import { hashPassword } from '../../services/passwords.js';
 import { generateTenantSlug } from '../../services/tenancy.js';
 import { asyncHandler } from '../../services/async-handler.js';
 import {
+  getNotificationQueueStats,
+  processQueuedNotifications,
   recordSystemNotification,
   sendDeviceRegistrationNotifications
 } from '../../services/notifications.js';
@@ -630,6 +632,25 @@ router.post('/workspaces/:id/test-registration-alert', asyncHandler(async (req, 
       providerResponse: item.providerResponse
     }))
   });
+}));
+
+// ── Notification management ──────────────────────────────────────────────────
+
+router.get('/notifications/stats', (_req, res) => {
+  const stats = getNotificationQueueStats();
+  const channelBreakdown = ['FCM', 'SMS', 'EMAIL', 'WHATSAPP', 'SYSTEM'].map((channel) => ({
+    channel,
+    queued:  db.notifications.filter((n) => n.channel === channel && n.status === 'QUEUED').length,
+    sent:    db.notifications.filter((n) => n.channel === channel && n.status === 'SENT').length,
+    failed:  db.notifications.filter((n) => n.channel === channel && n.status === 'FAILED').length,
+    skipped: db.notifications.filter((n) => n.channel === channel && n.status === 'SKIPPED').length
+  }));
+  res.json({ ...stats, channelBreakdown });
+});
+
+router.post('/notifications/dispatch', asyncHandler(async (_req, res) => {
+  const result = await processQueuedNotifications(50);
+  res.json({ ok: true, ...result });
 }));
 
 export default router;

@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { env } from '../config/env.js';
+import { logger } from '../services/logger.js';
+import { encryptBackup } from '../services/backup-crypto.js';
 import {
   hashPassword,
   isHashedPassword
@@ -746,9 +748,21 @@ function maybeCreateBackupSnapshot(snapshot: DatabaseRecord, force = false) {
   }
 
   const timestamp = new Date(now).toISOString().replace(/[:.]/g, '-');
-  const backupFile = path.join(backupDir, `financeguard-${timestamp}.json`);
-  fs.writeFileSync(backupFile, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
-  lastBackupAt = new Date(now).toISOString();
+  const json = `${JSON.stringify(snapshot, null, 2)}\n`;
+
+  try {
+    // Encrypted backup (.fgb) – preferred
+    const encryptedFile = path.join(backupDir, `financeguard-${timestamp}.fgb`);
+    fs.writeFileSync(encryptedFile, encryptBackup(json));
+    lastBackupAt = new Date(now).toISOString();
+    logger.info('Encrypted backup created', { file: encryptedFile });
+  } catch (encErr) {
+    // Fallback to plain JSON if encryption fails (e.g. bad key config)
+    logger.warn('Backup encryption failed – falling back to plain JSON', encErr instanceof Error ? { error: encErr.message } : {});
+    const plainFile = path.join(backupDir, `financeguard-${timestamp}.json`);
+    fs.writeFileSync(plainFile, json, 'utf8');
+    lastBackupAt = new Date(now).toISOString();
+  }
 }
 
 async function loadDatabase() {
@@ -783,7 +797,7 @@ export function persistDb() {
 
   persistQueue = task.catch((error) => {
     lastPersistError = error instanceof Error ? error.message : 'Unknown persistence error';
-    console.error('Persistence failed', error);
+    logger.error('Persistence failed', error);
   });
 
   return task;

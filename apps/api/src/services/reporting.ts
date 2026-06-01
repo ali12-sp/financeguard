@@ -120,6 +120,40 @@ export function buildPortfolioReport(tenantId: string, today = new Date()) {
       remainingBalance: contract.remainingBalance
     }));
 
+  // ── Overdue aging buckets ─────────────────────────────────────────────────
+  const nowMs = today.getTime();
+  function daysOverdue(dueDate: string) {
+    return Math.max(0, Math.floor((nowMs - new Date(`${dueDate}T00:00:00Z`).getTime()) / 86400000));
+  }
+
+  const agingBuckets = [
+    { label: '1–7 days',  min: 1,  max: 7 },
+    { label: '8–30 days', min: 8,  max: 30 },
+    { label: '31–60 days',min: 31, max: 60 },
+    { label: '60+ days',  min: 61, max: Infinity }
+  ].map(({ label, min, max }) => {
+    const matching = overdueInstallments.filter((inst) => {
+      const days = daysOverdue(inst.dueDate);
+      return days >= min && days <= max;
+    });
+    return {
+      label,
+      count: matching.length,
+      overdueAmount: matching.reduce((sum, inst) => sum + Math.max(inst.amountDue - inst.amountPaid, 0), 0)
+    };
+  });
+
+  // ── Payment method breakdown ──────────────────────────────────────────────
+  const paymentMethods = ['CASH', 'BANK_TRANSFER', 'EASYPAISA', 'JAZZCASH', 'CARD', 'OTHER'] as const;
+  const paymentMethodBreakdown = paymentMethods.map((method) => {
+    const matched = payments.filter((p) => p.paymentMethod === method);
+    return {
+      method,
+      count: matched.length,
+      totalReceived: matched.reduce((sum, p) => sum + p.receivedAmount, 0)
+    };
+  });
+
   return {
     generatedAt: today.toISOString(),
     totals: {
@@ -143,6 +177,8 @@ export function buildPortfolioReport(tenantId: string, today = new Date()) {
       collectionsThisMonth: thisMonthPayments.reduce((sum, payment) => sum + payment.receivedAmount, 0)
     },
     riskBuckets,
+    agingBuckets,
+    paymentMethodBreakdown,
     monthlyCollections,
     upcomingInstallments: getUpcomingInstallments(10, tenantId),
     delinquentAccounts,
