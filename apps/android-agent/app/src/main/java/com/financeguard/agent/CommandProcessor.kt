@@ -176,7 +176,9 @@ class CommandProcessor(
                     lockMessage = "",
                     lastCommandId = commandId
                 )
-                policyController.releaseManagedControl()
+                if (!policyController.releaseManagedControl()) {
+                    throw IllegalStateException("Device Owner control is still active after release.")
+                }
             }
         }
     }

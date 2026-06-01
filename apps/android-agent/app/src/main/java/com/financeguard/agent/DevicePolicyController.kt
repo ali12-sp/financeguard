@@ -171,7 +171,7 @@ class DevicePolicyController(
         }
     }
 
-    fun releaseManagedControl() {
+    fun releaseManagedControl(): Boolean {
         if (isDeviceOwner()) {
             applyUnlockedMode(returnHome = false)
             clearUserRestriction(UserManager.DISALLOW_FACTORY_RESET)
@@ -208,6 +208,8 @@ class DevicePolicyController(
         Handler(Looper.getMainLooper()).postDelayed({
             launchHomeScreen()
         }, 350)
+
+        return !isDeviceOwner()
     }
 
     fun enforceSavedState() {

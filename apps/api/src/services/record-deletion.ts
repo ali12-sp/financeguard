@@ -60,6 +60,17 @@ function needsControlRelease(device: DeviceRecord) {
   );
 }
 
+function canQueueReleaseCommand(device: DeviceRecord) {
+  return Boolean(
+    pendingReleaseCommand(device.id) ||
+    device.enrollmentStatus === 'ENROLLED' ||
+    device.uniqueId ||
+    device.pushToken ||
+    device.deviceOwnerPackage ||
+    device.lastSyncAt
+  );
+}
+
 function removeContractRecords(contractIds: Set<string>) {
   if (contractIds.size === 0) return;
 
@@ -227,7 +238,7 @@ export async function requestDeviceControlRelease(options: {
     throw new Error('Device not found');
   }
 
-  if (!needsControlRelease(device)) {
+  if (!canQueueReleaseCommand(device)) {
     device.state = 'RELEASED';
     device.enrollmentStatus = 'SUSPENDED';
     device.adminLocked = false;
