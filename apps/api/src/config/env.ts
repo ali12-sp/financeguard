@@ -24,6 +24,7 @@ export const env = {
   notificationDispatchIntervalMs: Number(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS || 30 * 1000),
   bodySizeLimit: process.env.BODY_SIZE_LIMIT || '1mb',
   runBackgroundJobs: process.env.RUN_BACKGROUND_JOBS !== 'false',
+  runNotificationDispatcher: process.env.RUN_NOTIFICATION_DISPATCHER !== 'false',
   corsAllowedOrigins: parseOrigins(process.env.CORS_ALLOWED_ORIGINS).length > 0
     ? parseOrigins(process.env.CORS_ALLOWED_ORIGINS)
     : ['http://localhost:3000', 'http://127.0.0.1:3000'],

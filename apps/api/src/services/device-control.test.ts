@@ -77,3 +77,16 @@ test('acknowledged latest unlock hides older pending locks from legacy polling',
     assert.deepEqual(getPendingCommandsForDevice('d-test'), []);
   });
 });
+
+test('failed commands are not returned to polling devices', () => {
+  withTemporaryCommands([
+    command({
+      id: 'cmd1',
+      type: 'LOCK',
+      status: 'FAILED',
+      createdAt: '2026-05-22T10:00:00.000Z'
+    })
+  ], () => {
+    assert.deepEqual(getPendingCommandsForDevice('d-test'), []);
+  });
+});

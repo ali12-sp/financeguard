@@ -37,6 +37,7 @@ type DbSnapshot = {
   installments: typeof db.installments;
   payments: typeof db.payments;
   deviceCommands: typeof db.deviceCommands;
+  notifications: typeof db.notifications;
 };
 
 function snapshotDb(): DbSnapshot {
@@ -45,7 +46,8 @@ function snapshotDb(): DbSnapshot {
     devices:        structuredClone(db.devices),
     installments:   structuredClone(db.installments),
     payments:       structuredClone(db.payments),
-    deviceCommands: structuredClone(db.deviceCommands)
+    deviceCommands: structuredClone(db.deviceCommands),
+    notifications:  structuredClone(db.notifications)
   };
 }
 
@@ -55,6 +57,7 @@ function restoreDb(snap: DbSnapshot) {
   db.installments   = snap.installments;
   db.payments       = snap.payments;
   db.deviceCommands = snap.deviceCommands;
+  db.notifications  = snap.notifications;
 }
 
 function makeContract(id: string): ContractRecord {
@@ -201,6 +204,47 @@ test('retryStaleDeviceCommands marks old PENDING commands as FAILED', async () =
     assert.equal(result.timedOut, 1, 'Only the old PENDING command should be timed out');
     assert.equal(db.deviceCommands.find((c) => c.id === 'cmd-stale-1')?.status, 'FAILED');
     assert.equal(db.deviceCommands.find((c) => c.id === 'cmd-fresh-1')?.status, 'PENDING', 'Fresh command must remain PENDING');
+  } finally {
+    restoreDb(snap);
+  }
+});
+
+test('retryStaleDeviceCommands queues a fresh command when latest lock is still needed', async () => {
+  const snap = snapshotDb();
+  try {
+    db.devices = [
+      {
+        id: 'd-test',
+        tenantId: 't-test',
+        imei: 'imei-test',
+        serial: 'serial-test',
+        modelName: 'Test Phone',
+        agentSecret: 'TEST_SECRET',
+        enrollmentStatus: 'ENROLLED',
+        state: 'RESTRICTED'
+      }
+    ];
+    db.deviceCommands = [
+      {
+        id: 'cmd-stale-1',
+        tenantId: 't-test',
+        deviceId: 'd-test',
+        type: 'LOCK',
+        status: 'PENDING',
+        reason: 'Overdue',
+        source: 'SCHEDULER',
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+    db.notifications = [];
+
+    const result = await retryStaleDeviceCommands(new Date());
+    assert.equal(result.timedOut, 1);
+    assert.equal(result.retried, 1);
+    assert.equal(db.deviceCommands.find((c) => c.id === 'cmd-stale-1')?.status, 'FAILED');
+    const retryCommand = db.deviceCommands.find((c) => c.id !== 'cmd-stale-1');
+    assert.equal(retryCommand?.type, 'LOCK');
+    assert.equal(retryCommand?.status, 'PENDING');
   } finally {
     restoreDb(snap);
   }

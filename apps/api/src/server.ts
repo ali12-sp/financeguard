@@ -155,6 +155,7 @@ app.listen(env.port, () => {
 if (env.runBackgroundJobs) {
   logger.info('Background jobs enabled', {
     schedulerIntervalMs: env.schedulerIntervalMs,
+    notificationDispatcher: env.runNotificationDispatcher,
     notificationIntervalMs: env.notificationDispatchIntervalMs,
     backupIntervalMs: env.backupIntervalMs
   });
@@ -163,9 +164,11 @@ if (env.runBackgroundJobs) {
     logger.error('Initial scheduler run failed', error);
   });
 
-  processQueuedNotifications().catch((error) => {
-    logger.error('Initial notification dispatch failed', error);
-  });
+  if (env.runNotificationDispatcher) {
+    processQueuedNotifications().catch((error) => {
+      logger.error('Initial notification dispatch failed', error);
+    });
+  }
 
   setInterval(() => {
     runInstallmentScheduler().catch((error) => {
@@ -173,11 +176,13 @@ if (env.runBackgroundJobs) {
     });
   }, env.schedulerIntervalMs);
 
-  setInterval(() => {
-    processQueuedNotifications().catch((error) => {
-      logger.error('Queued notification dispatch failed', error);
-    });
-  }, env.notificationDispatchIntervalMs);
+  if (env.runNotificationDispatcher) {
+    setInterval(() => {
+      processQueuedNotifications().catch((error) => {
+        logger.error('Queued notification dispatch failed', error);
+      });
+    }, env.notificationDispatchIntervalMs);
+  }
 
   if (env.backupIntervalMs > 0) {
     setInterval(() => {

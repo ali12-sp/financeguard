@@ -27,9 +27,13 @@ await runSchedulerPass().catch((error) => {
   logger.error('Initial scheduler run failed', error);
 });
 
-await runNotificationPass().catch((error) => {
-  logger.error('Initial notification dispatch failed', error);
-});
+if (env.runNotificationDispatcher) {
+  await runNotificationPass().catch((error) => {
+    logger.error('Initial notification dispatch failed', error);
+  });
+} else {
+  logger.info('Notification dispatcher disabled in this process');
+}
 
 if (env.backupIntervalMs > 0) {
   await runBackupPass().catch((error) => {
@@ -43,11 +47,13 @@ setInterval(() => {
   });
 }, env.schedulerIntervalMs);
 
-setInterval(() => {
-  runNotificationPass().catch((error) => {
-    logger.error('Queued notification dispatch failed', error);
-  });
-}, env.notificationDispatchIntervalMs);
+if (env.runNotificationDispatcher) {
+  setInterval(() => {
+    runNotificationPass().catch((error) => {
+      logger.error('Queued notification dispatch failed', error);
+    });
+  }, env.notificationDispatchIntervalMs);
+}
 
 if (env.backupIntervalMs > 0) {
   setInterval(() => {

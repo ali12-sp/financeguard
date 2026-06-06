@@ -126,6 +126,7 @@ function supersedeOlderCommands(
       command.deviceId !== deviceId ||
       command.id === supersedingCommand.id ||
       command.status === 'ACKNOWLEDGED' ||
+      command.status === 'FAILED' ||
       !commandSet.has(command.type) ||
       compareDeviceCommands(command, supersedingCommand) > 0
     ) {
@@ -356,7 +357,7 @@ export function getPendingCommandsForDevice(deviceId: string) {
   return db.deviceCommands
     .filter((item) =>
       item.deviceId === deviceId &&
-      item.status !== 'ACKNOWLEDGED' &&
+      (item.status === 'PENDING' || item.status === 'SENT') &&
       (!isStateCommand(item) || item.id === latestStateCommand?.id) &&
       (!isRecoveryModeCommand(item) || item.id === latestRecoveryModeCommand?.id)
     )

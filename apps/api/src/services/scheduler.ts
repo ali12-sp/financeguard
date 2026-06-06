@@ -2,9 +2,12 @@ import {
   addReminderEvent,
   db,
   persistDb,
+  type DeviceCommandRecord,
+  type DeviceCommandType,
   type NotificationChannel,
   type ReminderStage
 } from '../db/mock-db.js';
+import { env } from '../config/env.js';
 import { logger } from './logger.js';
 import {
   deriveContractStatus,
@@ -76,7 +79,75 @@ function hasReminderBeenRecorded(installmentId: string, stage: ReminderStage) {
  * COMMAND_TIMEOUT_MS (default 2 hours). Mark them FAILED so the scheduler
  * can re-issue fresh commands.
  */
-const COMMAND_TIMEOUT_MS = Number(process.env.COMMAND_TIMEOUT_MS ?? 2 * 60 * 60 * 1000);
+const COMMAND_TIMEOUT_MS = env.commandTimeoutMs;
+const STATE_COMMAND_TYPES = new Set<DeviceCommandType>([
+  'LOCK',
+  'UNLOCK',
+  'RELEASE_CONTROL'
+]);
+const RECOVERY_MODE_COMMAND_TYPES = new Set<DeviceCommandType>([
+  'ENABLE_LOST_MODE',
+  'DISABLE_LOST_MODE'
+]);
+
+function isNewerCommand(candidate: DeviceCommandRecord, command: DeviceCommandRecord) {
+  const createdAtOrder = candidate.createdAt.localeCompare(command.createdAt);
+  if (createdAtOrder !== 0) {
+    return createdAtOrder > 0;
+  }
+
+  return candidate.id.localeCompare(command.id) > 0;
+}
+
+function hasNewerCommandInSet(command: DeviceCommandRecord, commandSet: Set<DeviceCommandType>) {
+  return db.deviceCommands.some((candidate) =>
+    candidate.deviceId === command.deviceId &&
+    candidate.id !== command.id &&
+    commandSet.has(candidate.type) &&
+    isNewerCommand(candidate, command)
+  );
+}
+
+function shouldRetryTimedOutCommand(command: DeviceCommandRecord) {
+  const device = db.devices.find((item) => item.id === command.deviceId);
+  if (!device) {
+    return false;
+  }
+
+  if (STATE_COMMAND_TYPES.has(command.type) && hasNewerCommandInSet(command, STATE_COMMAND_TYPES)) {
+    return false;
+  }
+
+  if (RECOVERY_MODE_COMMAND_TYPES.has(command.type) && hasNewerCommandInSet(command, RECOVERY_MODE_COMMAND_TYPES)) {
+    return false;
+  }
+
+  if (command.type === 'LOCK') {
+    return device.state === 'RESTRICTED';
+  }
+
+  if (command.type === 'UNLOCK') {
+    return device.state === 'ACTIVE' || device.state === 'REMINDER' || device.state === 'GRACE';
+  }
+
+  if (command.type === 'RELEASE_CONTROL') {
+    return device.state === 'RELEASED' || device.pendingDeletion === true;
+  }
+
+  if (command.type === 'REQUEST_LOCATION') {
+    return device.locationRequestPending === true;
+  }
+
+  if (command.type === 'ENABLE_LOST_MODE') {
+    return device.lostModeEnabled === true;
+  }
+
+  if (command.type === 'DISABLE_LOST_MODE') {
+    return device.lostModeEnabled !== true;
+  }
+
+  return false;
+}
 
 export async function retryStaleDeviceCommands(now = new Date()) {
   const cutoff = new Date(now.getTime() - COMMAND_TIMEOUT_MS).toISOString();
@@ -86,7 +157,19 @@ export async function retryStaleDeviceCommands(now = new Date()) {
       cmd.createdAt < cutoff
   );
 
-  if (stale.length === 0) return { timedOut: 0 };
+  if (stale.length === 0) return { timedOut: 0, retried: 0 };
+
+  const retryRequests = stale
+    .filter((cmd) => shouldRetryTimedOutCommand(cmd))
+    .map((cmd) => ({
+      deviceId: cmd.deviceId,
+      contractId: cmd.contractId,
+      type: cmd.type,
+      reason: cmd.reason,
+      source: cmd.source,
+      lockMessage: cmd.lockMessage,
+      payload: cmd.payload ? structuredClone(cmd.payload) : undefined
+    }));
 
   for (const cmd of stale) {
     cmd.status = 'FAILED';
@@ -95,7 +178,19 @@ export async function retryStaleDeviceCommands(now = new Date()) {
   }
 
   await persistDb();
-  return { timedOut: stale.length };
+
+  let retried = 0;
+  for (const retryRequest of retryRequests) {
+    const retryCommand = await issueDeviceCommand(retryRequest);
+    retried += 1;
+    logger.info('Device command retry queued', {
+      commandId: retryCommand.id,
+      deviceId: retryCommand.deviceId,
+      type: retryCommand.type
+    });
+  }
+
+  return { timedOut: stale.length, retried };
 }
 
 export async function runInstallmentScheduler(now = new Date(), tenantId?: string) {
