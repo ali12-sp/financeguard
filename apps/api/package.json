@@ -14,7 +14,7 @@
     "worker": "node dist/worker.js",
     "backup": "npm run build && node dist/backup.js",
     "restore": "npm run build && node dist/restore.js",
-    "test": "npm run build && node dist/verify.js && node dist/modules/contracts/ledger.test.js && node dist/modules/contracts/payment-unlock.test.js && node dist/services/device-control.test.js && node dist/services/device-recovery.test.js && node dist/services/provisioning.test.js && node dist/services/passwords.test.js && node dist/services/secrets.test.js"
+    "test": "npm run build && node dist/verify.js && node dist/modules/contracts/ledger.test.js && node dist/modules/contracts/payment-unlock.test.js && node dist/services/device-control.test.js && node dist/services/device-recovery.test.js && node dist/services/provisioning.test.js && node dist/services/record-deletion.test.js && node dist/services/passwords.test.js && node dist/services/secrets.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

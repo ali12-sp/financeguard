@@ -166,7 +166,7 @@ function pendingReleaseCommand(deviceId: string) {
     (item) =>
       item.deviceId === deviceId &&
       item.type === 'RELEASE_CONTROL' &&
-      item.status !== 'ACKNOWLEDGED'
+      (item.status === 'PENDING' || item.status === 'SENT')
   ) ?? null;
 }
 
